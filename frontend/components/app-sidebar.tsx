@@ -82,7 +82,7 @@ export function AppSidebar({
     cn(
       isCompact
         ? 'h-10 w-10 rounded-xl p-0'
-        : 'h-11 w-full justify-start rounded-xl px-0 text-sm font-medium',
+        : 'h-11 w-full justify-start rounded-xl px-2 text-sm font-medium',
 
       isActive
         ? cn(
@@ -113,7 +113,11 @@ export function AppSidebar({
 
     const button = isDisabled ? (
       <Button variant="quiet" className={navButtonClass(isActive, true)} disabled>
-        {content}
+        <span className={cn('flex shrink-0 items-center justify-center', isCompact ? 'w-10' : 'w-10')}>
+          <Icon className={cn(isCompact ? 'h-5 w-5' : 'h-4 w-4')} />
+        </span>
+        {!isCompact && <span>{item.label}</span>}
+        {isCompact && <span className="sr-only">{item.label}</span>}
       </Button>
     ) : (
       <Button
@@ -123,7 +127,11 @@ export function AppSidebar({
         onClick={onNavigate}
       >
         <Link href={item.href} aria-label={item.label}>
-          {content}
+          <span className={cn('flex shrink-0 items-center justify-center', isCompact ? 'w-10' : 'w-10')}>
+            <Icon className={cn(isCompact ? 'h-5 w-5' : 'h-4 w-4')} />
+          </span>
+          {!isCompact && <span>{item.label}</span>}
+          {isCompact && <span className="sr-only">{item.label}</span>}
         </Link>
       </Button>
     );
@@ -145,25 +153,34 @@ export function AppSidebar({
   const renderSidebarToggle = (tooltipSide: 'right' | 'bottom' = 'right') => {
     if (!showExpandToggle) return null;
 
+    const icon = <Zap className={cn(isCompact ? 'h-5 w-5' : 'h-4 w-4')} />;
+
+    const content = isCompact ? (
+      <>
+        <span className="flex w-10 shrink-0 items-center justify-center">{icon}</span>
+        <span className="sr-only">{toggleLabel}</span>
+      </>
+    ) : (
+      <>
+        <span className="flex w-10 shrink-0 items-center justify-center">{icon}</span>
+        <span>{toggleLabel}</span>
+      </>
+    );
+
     const toggleButton = (
       <Button
         variant="quiet"
         type="button"
         className={cn(
           'rounded-xl border border-transparent text-muted-foreground hover:bg-muted/75 hover:text-foreground',
-          isCompact
-            ? 'h-10 w-10 p-0'
-            : 'h-11 w-full justify-start px-0 text-sm font-medium'
+          isCompact ? 'h-10 w-10 p-0' : 'h-11 w-full justify-start px-2 text-sm font-medium'
         )}
         onClick={onToggleExpand}
         disabled={!onToggleExpand}
         aria-label={toggleLabel}
         aria-pressed={!isCompact}
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center">
-          <Zap className={cn(isCompact ? 'h-5 w-5' : 'h-4 w-4')} />
-        </span>
-        {isCompact ? <span className="sr-only">{toggleLabel}</span> : <span>{toggleLabel}</span>}
+        {content}
       </Button>
     );
 
@@ -297,8 +314,8 @@ export function AppSidebar({
           </>
         ) : (
           <>
-            <div className="pb-4">
-              {showExpandToggle ? renderSidebarToggle('bottom') : null}
+            <div className="flex items-center justify-between px-1 pb-4">
+              <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">NAVIGATION</p>
             </div>
 
             <div className="pb-4">
@@ -306,6 +323,7 @@ export function AppSidebar({
             </div>
 
             <nav className="space-y-2">
+              {showExpandToggle ? <div>{renderSidebarToggle('bottom')}</div> : null}
               {navItems.map(item => (
                 <div key={item.href}>{renderNavButton(item)}</div>
               ))}
