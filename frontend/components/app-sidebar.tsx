@@ -101,6 +101,16 @@ export function AppSidebar({
     const Icon = item.icon;
     const disabledHint = item.requiresResults ? 'Run an analysis first to view results' : 'Unavailable';
 
+    const content = (
+      <>
+        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center')}>
+          <Icon className={cn(isCompact ? 'h-5 w-5' : 'h-4 w-4')} />
+        </span>
+        {!isCompact && <span className="truncate">{item.label}</span>}
+        {isCompact && <span className="sr-only">{item.label}</span>}
+      </>
+    );
+
     const button = isDisabled ? (
       <Button variant="quiet" className={navButtonClass(isActive, true)} disabled>
         <span className={cn('flex shrink-0 items-center justify-center', isCompact ? 'w-10' : 'w-10')}>
@@ -268,7 +278,7 @@ export function AppSidebar({
       <aside
         className={cn(
           'relative flex h-full flex-col border-r border-sidebar-border/85 bg-sidebar/94',
-          isCompact ? 'w-[64px] items-center py-5' : 'w-full min-w-[260px] p-4'
+          isCompact ? 'w-[64px] items-center py-5' : 'w-full min-w-[260px] px-3 py-4'
         )}
       >
         {isCompact ? (
@@ -306,6 +316,10 @@ export function AppSidebar({
           <>
             <div className="flex items-center justify-between px-1 pb-4">
               <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">NAVIGATION</p>
+            </div>
+
+            <div className="pb-4">
+              <p className="px-4 text-xs font-semibold tracking-[0.08em] text-muted-foreground">NAVIGATION</p>
             </div>
 
             <nav className="space-y-2">
