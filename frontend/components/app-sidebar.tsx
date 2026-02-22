@@ -314,13 +314,7 @@ export function AppSidebar({
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between px-1 pb-4">
-              <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">NAVIGATION</p>
-            </div>
-
-            <div className="pb-4">
-              <p className="px-4 text-xs font-semibold tracking-[0.08em] text-muted-foreground">NAVIGATION</p>
-            </div>
+          
 
             <nav className="space-y-2">
               {showExpandToggle ? <div>{renderSidebarToggle('bottom')}</div> : null}
