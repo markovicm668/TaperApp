@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #f8f9fc;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #1d2433;
+  --primary: #49567e;
+  --primary-foreground: #f8f9fc;
+  --secondary: #e9edf4;
+  --secondary-foreground: #2f3a55;
+  --muted: #f1f3f6;
+  --muted-foreground: #5f6b7f;
+  --accent: #e9edf4;
+  --accent-foreground: #2f3a55;
+  --destructive: #c53f3f;
+  --destructive-foreground: #ffffff;
+  --border: #d8deea;
+  --input: #c7d0df;
+  --ring: #65739d;
+  --chart-1: #49567e;
+  --chart-2: #6b79a2;
+  --chart-3: #2f617e;
+  --chart-4: #2b7358;
+  --chart-5: #7a5f95;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1d2433;
+  --sidebar-primary: #49567e;
+  --sidebar-primary-foreground: #f8f9fc;
+  --sidebar-accent: #e9edf4;
+  --sidebar-accent-foreground: #2f3a55;
+  --sidebar-border: #d8deea;
+  --sidebar-ring: #65739d;
+  --success: #1f7a4a;
+  --success-foreground: #ffffff;
+  --warning: #9a6a1a;
+  --warning-foreground: #ffffff;
+}
+
+.dark {
+  --background: #0f131d;
+  --foreground: #e4e8f2;
+  --card: #141a25;
+  --card-foreground: #e4e8f2;
+  --popover: #141a25;
+  --popover-foreground: #e4e8f2;
+  --primary: #8493bd;
+  --primary-foreground: #0f131d;
+  --secondary: #20293a;
+  --secondary-foreground: #d6ddec;
+  --muted: #1b2433;
+  --muted-foreground: #99a5bf;
+  --accent: #20293a;
+  --accent-foreground: #dbe2f2;
+  --destructive: #de6666;
+  --destructive-foreground: #140f13;
+  --border: #2a3549;
+  --input: #35445b;
+  --ring: #90a0cd;
+  --chart-1: #8493bd;
+  --chart-2: #7f8bb0;
+  --chart-3: #4a7794;
+  --chart-4: #3c8a69;
+  --chart-5: #8e73a7;
+  --sidebar: #131925;
+  --sidebar-foreground: #e4e8f2;
+  --sidebar-primary: #8493bd;
+  --sidebar-primary-foreground: #111722;
+  --sidebar-accent: #20293a;
+  --sidebar-accent-foreground: #dbe2f2;
+  --sidebar-border: #2a3549;
+  --sidebar-ring: #90a0cd;
+  --success: #39a668;
+  --success-foreground: #121a14;
+  --warning: #c18c3a;
+  --warning-foreground: #1e1407;
+}
+
+@theme inline {
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), 'Times New Roman', serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground antialiased;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(1240px 560px at -10% -12%, rgb(73 86 126 / 0.11), transparent 58%),
+      radial-gradient(940px 500px at 108% -18%, rgb(53 69 112 / 0.08), transparent 60%);
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(1240px 560px at -12% -16%, rgb(113 130 174 / 0.2), transparent 56%),
+      radial-gradient(980px 520px at 114% -20%, rgb(78 96 139 / 0.16), transparent 62%);
+  }
+}
