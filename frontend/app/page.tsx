@@ -26,10 +26,13 @@ export default function AnalyzePage() {
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
   const [jobDescription, setJobDescription] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isParsingOnly, setIsParsingOnly] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const progressCompleteRef = useRef(false);
 
   const canAnalyze = resumeData && jobDescription.trim().length > 50;
+  const canParseOnly = Boolean(resumeData);
+  const isBusy = isAnalyzing || isParsingOnly;
 
   const handleAnalyze = useCallback(async () => {
     if (!resumeData || !jobDescription) return;
@@ -113,6 +116,58 @@ export default function AnalyzePage() {
     setSourceInput,
   ]);
 
+
+  const handleParseOnly = useCallback(async () => {
+    if (!resumeData) return;
+
+    setIsParsingOnly(true);
+
+    setSourceInput({
+      inputType: resumeData.type,
+      rawText: resumeData.content,
+      fileName: resumeData.fileName,
+      clearAnalysis: true,
+    });
+
+    try {
+      const parseResultResponse = await parseResume({
+        resumeText: resumeData.content,
+        inputType: resumeData.type,
+        fileName: resumeData.fileName,
+      });
+
+      setParsedPayload(parseResultResponse);
+
+      const parseOnlyResult: AnalysisResult = {
+        id: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        status: 'completed',
+        matchScore: 0,
+        targetRole: 'Parsed Resume',
+        company: 'Parse-only mode',
+        overallFit: 'fair',
+        roleSeniority: 'mid',
+        keywordGaps: [],
+        bulletChanges: [],
+        rewriteSuggestions: [],
+        atsChecks: [],
+        riskFlags: [],
+        recommendedEdits: [],
+      };
+
+      setAnalysisSnapshot(analysisResultToSnapshot(parseOnlyResult));
+      router.push('/results');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown parse error occurred.';
+      console.error('Parse API Error:', errorMessage, err);
+      toast.error('Parse failed', {
+        description: errorMessage || 'Please check the console for details.',
+      });
+    } finally {
+      setIsParsingOnly(false);
+    }
+  }, [resumeData, router, setAnalysisSnapshot, setParsedPayload, setSourceInput]);
+
   const handleAnalysisComplete = useCallback(() => {
     progressCompleteRef.current = true;
 
@@ -156,14 +211,21 @@ export default function AnalyzePage() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" onClick={handleReset} disabled={isAnalyzing}>
+            <Button variant="outline" onClick={handleReset} disabled={isBusy}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Reset
             </Button>
             <Button
+              variant="secondary"
+              onClick={handleParseOnly}
+              disabled={!canParseOnly || isBusy}
+            >
+              Parse Resume Only
+            </Button>
+            <Button
               size="lg"
               onClick={handleAnalyze}
-              disabled={!canAnalyze || isAnalyzing}
+              disabled={!canAnalyze || isBusy}
               className="gap-2"
             >
               <Zap className="h-4 w-4" />
@@ -178,7 +240,7 @@ export default function AnalyzePage() {
           {!resumeData
             ? 'Please paste your resume'
             : jobDescription.length < 50
-              ? 'Job description must be at least 50 characters'
+              ? 'Job description must be at least 50 characters (not required for Parse Resume Only)'
               : null}
         </p>
       )}

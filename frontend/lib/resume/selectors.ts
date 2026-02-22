@@ -15,6 +15,7 @@ import {
 } from './mappers';
 import {
   materializeEffectiveResumeText,
+  applyBulletChangesToResumeData,
   materializeEffectiveSections,
 } from './effective';
 import { type ResumeStoreState, useResumeSelector } from './store';
@@ -61,7 +62,13 @@ export const selectCanonicalParsePayload = (
 export const selectParsedPayload = selectCanonicalParsePayload;
 
 export const selectCanonicalExportPayload = (state: ResumeStoreState): ResumePdfPayload | null =>
-  buildCanonicalExportPayload(selectCanonicalParsePayload(state));
+  buildCanonicalExportPayload(selectCanonicalParsePayload(state), {
+    resumeDataOverride: applyBulletChangesToResumeData(
+      selectResumeData(state),
+      selectBulletChanges(state),
+      'user'
+    ),
+  });
 
 // Compatibility alias.
 export const selectExportPayload = selectCanonicalExportPayload;
