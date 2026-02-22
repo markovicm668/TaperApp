@@ -630,9 +630,14 @@ export function buildSectionViewModel(options: {
 }
 
 export function buildCanonicalExportPayload(
-  parsedPayload: AiParsedResumePayloadV2 | null
+  parsedPayload: AiParsedResumePayloadV2 | null,
+  options: {
+    resumeDataOverride?: ResumeDataV2;
+  } = {}
 ): ResumePdfPayload | null {
   if (!parsedPayload) return null;
+
+  const resumeData = options.resumeDataOverride || parsedPayload.resumeData;
 
   const parsedSections = sanitizeParsedSections([
     ...(Array.isArray(parsedPayload.sections) ? parsedPayload.sections : []),
@@ -687,12 +692,12 @@ export function buildCanonicalExportPayload(
   });
 
   return {
-    ...parsedPayload.resumeData,
+    ...resumeData,
     sections: sections.length ? sections : undefined,
     sectionOrder: sections.length
       ? sections.map(section => section.id)
-      : Array.isArray(parsedPayload.resumeData.sectionOrder)
-        ? parsedPayload.resumeData.sectionOrder
+      : Array.isArray(resumeData.sectionOrder)
+        ? resumeData.sectionOrder
         : [],
   };
 }

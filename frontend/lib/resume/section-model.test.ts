@@ -153,6 +153,31 @@ test('buildCanonicalExportPayload returns null when no canonical parse payload e
   assert.equal(payload, null);
 });
 
+test('buildCanonicalExportPayload uses resumeData override for canonical sections', () => {
+  const payload = buildCanonicalExportPayload(makeParsedPayload(), {
+    resumeDataOverride: {
+      ...makeParsedPayload().resumeData,
+      work: [
+        {
+          company: 'Acme',
+          position: 'Engineer',
+          highlights: [
+            {
+              text: 'Built and scaled backend APIs',
+              originalText: 'Built backend APIs',
+            },
+          ],
+        },
+      ],
+      sectionOrder: [],
+    },
+  });
+
+  assert.ok(payload);
+  assert.equal(payload?.work?.[0]?.highlights?.[0]?.text, 'Built and scaled backend APIs');
+  assert.equal(payload?.work?.[0]?.highlights?.[0]?.originalText, 'Built backend APIs');
+});
+
 test('buildSectionViewModel renders parsed sections and tracks updated lines', () => {
   const updatedText = `Jane Doe
 jane@example.com
