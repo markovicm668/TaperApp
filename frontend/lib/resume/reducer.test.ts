@@ -154,6 +154,21 @@ test('setBulletChanges updates editable list without mutating persisted analysis
   assert.equal(changed.workspace.resumeData.work[0]?.highlights?.[0]?.source, 'user');
 });
 
+test('setSectionOrder updates persisted resume section order', () => {
+  const next = resumeReducer(initialResumeStoreState, {
+    type: 'setSectionOrder',
+    payload: {
+      sectionOrder: ['canonical-header', 'canonical-work', 'canonical-skills'],
+    },
+  });
+
+  assert.deepEqual(next.workspace.resumeData.sectionOrder, [
+    'canonical-header',
+    'canonical-work',
+    'canonical-skills',
+  ]);
+});
+
 test('setParsedPayload stores parsed resume payload and updates workspace source + resumeData', () => {
   const next = resumeReducer(initialResumeStoreState, {
     type: 'setParsedPayload',
@@ -196,6 +211,49 @@ test('setParsedPayload stores parsed resume payload and updates workspace source
   assert.equal('source' in (next.workspace.analysis.ai.parsed || {}), false);
   assert.equal(next.workspace.source.rawText, 'Jane Doe\n\nExperience\n- Built APIs');
   assert.equal(next.workspace.resumeData.work[0]?.company, 'Acme');
+});
+
+test('setParsedPayload preserves existing user section order when local order is already set', () => {
+  const withCustomOrder = resumeReducer(initialResumeStoreState, {
+    type: 'setSectionOrder',
+    payload: {
+      sectionOrder: ['canonical-header', 'canonical-skills', 'canonical-work'],
+    },
+  });
+
+  const next = resumeReducer(withCustomOrder, {
+    type: 'setParsedPayload',
+    payload: {
+      parsed: {
+        version: '2',
+        source: {
+          inputType: 'text',
+          rawText: 'Jane Doe\n\nExperience\n- Built APIs',
+          importedAt: '2026-02-12T00:00:00.000Z',
+          parser: 'gemini-section-parser-v2',
+          parsedAt: '2026-02-12T00:00:00.000Z',
+        },
+        resumeData: {
+          work: [{ company: 'Acme', position: 'Engineer', highlights: ['Built APIs'] }],
+          education: [],
+          projects: [],
+          awards: [],
+          skills: [{ name: 'TypeScript', category: 'Technical' }],
+          languages: [],
+          customSections: [],
+          sectionOrder: [],
+          versions: [],
+        },
+        notes: [],
+      },
+    },
+  });
+
+  assert.deepEqual(next.workspace.resumeData.sectionOrder, [
+    'canonical-header',
+    'canonical-skills',
+    'canonical-work',
+  ]);
 });
 
 test('setParsedPayload maps parse response into a schema-valid workspace update', () => {
@@ -389,4 +447,217 @@ test('selectEffectiveSectionViewModel includes canonical header fallback when pa
   assert.equal(header?.originalValue.includes('Luka Petrovic'), true);
   assert.equal(header?.originalValue.includes('Junior Business Analyst'), true);
   assert.equal(header?.originalValue.includes('Belgrade, Serbia'), true);
+});
+
+test('applyInlineEdit updates work heading/date/location and preserves analysis snapshot', () => {
+  const snapshot = analysisResultToSnapshot(sampleAnalysisResult());
+  const withSnapshot = resumeReducer(
+    resumeReducer(initialResumeStoreState, {
+      type: 'setParsedPayload',
+      payload: {
+        parsed: {
+          version: '2',
+          source: {
+            inputType: 'text',
+            rawText: 'Experience',
+            importedAt: '2026-02-20T00:00:00.000Z',
+            parser: 'gemini-section-parser-v2',
+            parsedAt: '2026-02-20T00:00:00.000Z',
+          },
+          resumeData: {
+            basics: { name: 'Jane Doe' },
+            summary: 'Summary',
+            work: [
+              {
+                id: 'work-1',
+                company: 'Acme',
+                position: 'Engineer',
+                startDate: '2022',
+                endDate: '2024',
+                location: { city: 'Belgrade', country: 'Serbia' },
+                highlights: [{ id: 'wh-1', text: 'Built APIs', originalText: 'Built APIs' }],
+              },
+            ],
+            projects: [],
+            education: [],
+            awards: [],
+            skills: [],
+            languages: [],
+            customSections: [],
+            sectionOrder: [],
+            versions: [],
+          },
+          notes: [],
+        },
+      },
+    }),
+    {
+      type: 'setAnalysisSnapshot',
+      payload: { snapshot },
+    }
+  );
+
+  const afterHeading = resumeReducer(withSnapshot, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'entry-slot',
+        section: 'work',
+        entryItemKey: 'item:work:entry:work-1',
+        slot: 'heading',
+      },
+      text: 'Senior Engineer - Nova',
+    },
+  });
+
+  const afterDate = resumeReducer(afterHeading, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'entry-slot',
+        section: 'work',
+        entryItemKey: 'item:work:entry:work-1',
+        slot: 'date',
+      },
+      text: '2023 - Present',
+    },
+  });
+
+  const afterLocation = resumeReducer(afterDate, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'entry-slot',
+        section: 'work',
+        entryItemKey: 'item:work:entry:work-1',
+        slot: 'location',
+      },
+      text: 'Novi Sad, Serbia',
+    },
+  });
+
+  const work = afterLocation.workspace.resumeData.work[0];
+  assert.equal(work?.position, 'Senior Engineer');
+  assert.equal(work?.company, 'Nova');
+  assert.equal(work?.startDate, '2023');
+  assert.equal(work?.endDate, undefined);
+  assert.equal(work?.isCurrent, true);
+  assert.equal(work?.location?.city, 'Novi Sad');
+  assert.equal(work?.location?.country, 'Serbia');
+  assert.equal(
+    afterLocation.workspace.analysis.lastAnalysisResult?.bulletChanges[0]?.improved.includes('modernization'),
+    false
+  );
+});
+
+test('applyInlineEdit updates project technologies, education honors, and custom parsed lines', () => {
+  const state = resumeReducer(initialResumeStoreState, {
+    type: 'setParsedPayload',
+    payload: {
+      parsed: {
+        version: '2',
+        source: {
+          inputType: 'text',
+          rawText: 'Projects',
+          importedAt: '2026-02-20T00:00:00.000Z',
+          parser: 'gemini-section-parser-v2',
+          parsedAt: '2026-02-20T00:00:00.000Z',
+        },
+        resumeData: {
+          basics: { name: 'Jane Doe' },
+          summary: 'Summary',
+          work: [],
+          projects: [
+            {
+              id: 'proj-1',
+              name: 'Project One',
+              role: 'Owner',
+              description: 'Desc',
+              technologies: [
+                { skillRefId: 's1', name: 'React' },
+                { skillRefId: 's2', name: 'Node.js' },
+              ],
+              highlights: [],
+            },
+          ],
+          education: [
+            {
+              id: 'edu-1',
+              institution: 'University',
+              honors: ['Dean list', 'Scholarship'],
+            },
+          ],
+          awards: [],
+          skills: [{ id: 'skill-1', name: 'TypeScript', category: 'Technical' }],
+          languages: [],
+          customSections: [
+            {
+              id: 'custom-publications',
+              title: 'Publications',
+              items: [{ id: 'pub-1', text: 'Paper A' }],
+            },
+          ],
+          sectionOrder: [],
+          versions: [],
+        },
+        notes: [],
+        customSections: [
+          {
+            id: 'custom-publications',
+            title: 'Publications',
+            kind: 'custom',
+            canonicalTarget: 'none',
+            lines: ['Paper A'],
+          },
+        ],
+      },
+    },
+  });
+
+  const afterTech = resumeReducer(state, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'entry-slot',
+        section: 'projects',
+        entryItemKey: 'item:projects:entry:proj-1',
+        slot: 'technologies',
+      },
+      text: 'Technologies: TypeScript, Next.js',
+    },
+  });
+
+  const afterHonor = resumeReducer(afterTech, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'entry-slot',
+        section: 'education',
+        entryItemKey: 'item:education:entry:edu-1',
+        slot: 'honor',
+        index: 1,
+      },
+      text: 'Merit Scholarship',
+    },
+  });
+
+  const afterCustom = resumeReducer(afterHonor, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: {
+        kind: 'item',
+        itemKey: 'item:custom:custom-publications:line:0',
+      },
+      text: 'Paper B',
+    },
+  });
+
+  assert.deepEqual(
+    afterCustom.workspace.resumeData.projects[0]?.technologies.map(tech => tech.name),
+    ['TypeScript', 'Next.js']
+  );
+  assert.equal(afterCustom.workspace.resumeData.projects[0]?.technologies[0]?.skillRefId, 's1');
+  assert.equal(afterCustom.workspace.resumeData.education[0]?.honors?.[1], 'Merit Scholarship');
+  assert.equal(afterCustom.workspace.resumeData.customSections[0]?.items?.[0]?.text, 'Paper B');
+  assert.equal(afterCustom.workspace.analysis.ai.parsed?.customSections?.[0]?.lines?.[0], 'Paper B');
 });

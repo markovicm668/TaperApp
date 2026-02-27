@@ -8,6 +8,7 @@ import type {
   ResumeInputType,
 } from '@resume-scanner/resume-contract';
 import { initialResumeStoreState, resumeReducer } from './reducer';
+import type { ResumeInlineEditTarget } from './inline-edits';
 import { loadWorkspaceFromSession, writeWorkspaceToSession } from './storage';
 import { ResumeActionsContext, ResumeStateContext, type ResumeActions } from './store';
 
@@ -82,6 +83,12 @@ export function ResumeProvider({ children }: ResumeProviderProps) {
       },
       setBulletChanges(changes: BulletChange[]) {
         dispatch({ type: 'setBulletChanges', payload: { changes } });
+      },
+      setSectionOrder(sectionOrder: string[]) {
+        dispatch({ type: 'setSectionOrder', payload: { sectionOrder } });
+      },
+      applyInlineEdit(target: ResumeInlineEditTarget, text: string) {
+        dispatch({ type: 'applyInlineEdit', payload: { target, text } });
       },
       resetWorkspace() {
         dispatch({ type: 'resetWorkspace' });

@@ -119,7 +119,11 @@ export const selectEffectiveSectionViewModel = (
     selectResumeText(state),
     selectBulletChanges(state),
     selectParsedResumeSections(state),
-    selectResumeData(state)
+    applyBulletChangesToResumeData(
+      selectResumeData(state),
+      selectBulletChanges(state),
+      'user'
+    )
   );
 
 export function useResumeWorkspace(): ResumeWorkspaceV2 {

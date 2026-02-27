@@ -7,6 +7,7 @@ import type {
   BulletChange,
   ResumeInputType,
 } from '@resume-scanner/resume-contract';
+import type { ResumeInlineEditTarget } from './inline-edits';
 import type { ResumeStoreState } from './reducer';
 
 export interface ResumeActions {
@@ -19,6 +20,8 @@ export interface ResumeActions {
   setAnalysisSnapshot: (snapshot: AnalysisSnapshotV1 | null) => void;
   setParsedPayload: (payload: AiParsedResumePayloadV2 | null) => void;
   setBulletChanges: (changes: BulletChange[]) => void;
+  setSectionOrder: (sectionOrder: string[]) => void;
+  applyInlineEdit: (target: ResumeInlineEditTarget, text: string) => void;
   resetWorkspace: () => void;
 }
 

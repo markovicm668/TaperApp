@@ -301,3 +301,101 @@ test('generateResumeHtml keeps canonical-first rendering when renderMode is omit
   const html = generateResumeHtml(resume);
   assert.equal(html.includes('Built backend APIs</li>'), true);
 });
+
+test('generateResumeHtml renders summary from canonical data when renderMode is omitted', () => {
+  const resume = {
+    basics: { name: 'Jane Doe' },
+    summary: 'Clean canonical summary',
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Jane Doe'] },
+      {
+        id: 'sec-about',
+        title: 'ABOUT ME',
+        kind: 'summary',
+        lines: ['ABOUT ME Raw parser line'],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'sec-about'],
+  };
+
+  const html = generateResumeHtml(resume);
+  assert.equal(html.includes('<h2>ABOUT ME</h2>'), true);
+  assert.equal(html.includes('Clean canonical summary'), true);
+  assert.equal(html.includes('ABOUT ME Raw parser line'), false);
+});
+
+test('generateResumeHtml renders summary from section lines when renderMode is lines', () => {
+  const resume = {
+    basics: { name: 'Jane Doe' },
+    summary: 'Clean canonical summary',
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Jane Doe'] },
+      {
+        id: 'sec-about',
+        title: 'ABOUT ME',
+        kind: 'summary',
+        renderMode: 'lines',
+        lines: ['ABOUT ME Raw parser line'],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'sec-about'],
+  };
+
+  const html = generateResumeHtml(resume);
+  assert.equal(html.includes('<h2>ABOUT ME</h2>'), true);
+  assert.equal(html.includes('ABOUT ME Raw parser line'), true);
+  assert.equal(html.includes('Clean canonical summary'), false);
+});
+
+test('generateResumeHtml avoids duplicated ABOUT ME label in canonical summary mode', () => {
+  const resume = {
+    basics: { name: 'Aleksandar Stojanovic' },
+    summary:
+      'Digital Account Manager seeking to continue learning and growing through a dynamic work environment.',
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Aleksandar Stojanovic'] },
+      {
+        id: 'sec-about',
+        title: 'ABOUT ME',
+        kind: 'summary',
+        lines: [
+          'ABOUT ME Digital Account Manager seeking to continue learning and growing through a dynamic work environment.',
+        ],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'sec-about'],
+  };
+
+  const html = generateResumeHtml(resume);
+  assert.equal(html.includes('<h2>ABOUT ME</h2>'), true);
+  assert.equal(
+    html.includes(
+      '<p>ABOUT ME Digital Account Manager seeking to continue learning and growing through a dynamic work environment.</p>'
+    ),
+    false
+  );
+  assert.equal(
+    html.includes(
+      '<p>Digital Account Manager seeking to continue learning and growing through a dynamic work environment.</p>'
+    ),
+    true
+  );
+});

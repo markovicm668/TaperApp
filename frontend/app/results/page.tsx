@@ -1,17 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import { RecommendedEdits } from '@/components/results/recommended-edits';
-import { KeywordGaps } from '@/components/results/keyword-gaps';
 import { DiffView } from '@/components/results/diff-view';
-import { ATSChecks } from '@/components/results/ats-checks';
+import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { Button } from '@/components/ui/button';
 import { ScoreRing } from '@/components/score-ring';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { exportResumePdf } from '@/lib/api';
+import type { ResumePdfPayload } from '@/lib/types';
 import {
   useBulletChanges,
   useCanonicalParsePayload,
@@ -22,6 +20,16 @@ import {
   useSectionViewModel,
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
+import {
+  buildPdfSelectionModel,
+  filterResumePdfPayloadForSelection,
+  normalizePdfSelectionOverrides,
+  togglePdfSelectionItem,
+  togglePdfSelectionSection,
+  type PdfSelectionOverrides,
+} from '@/lib/resume/pdf-selection';
+
+const PDF_SELECTION_STORAGE_KEY = 'resumePdfSelection.v1';
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -31,9 +39,10 @@ export default function ResultsPage() {
   const resumeText = useResumeText();
   const bulletChanges = useBulletChanges();
   const sectionRows = useSectionViewModel();
-  const { setBulletChanges, resetWorkspace } = useResumeActions();
+  const { setBulletChanges, setSectionOrder, applyInlineEdit, resetWorkspace } = useResumeActions();
   const [isExporting, setIsExporting] = useState(false);
   const [isCopyingJson, setIsCopyingJson] = useState(false);
+  const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -43,6 +52,80 @@ export default function ResultsPage() {
   }, [analysisResult, isHydrated, router]);
 
   const exportResumePayload = useExportPayload();
+  const pdfSelectionModel = useMemo(
+    () => (exportResumePayload ? buildPdfSelectionModel(exportResumePayload) : null),
+    [exportResumePayload]
+  );
+  const pdfSelectionFingerprint = useMemo(() => {
+    if (analysisResult?.id) return `result:${analysisResult.id}`;
+    if (!exportResumePayload) return null;
+    const fallbackId = exportResumePayload.id || 'resume';
+    const modified = exportResumePayload.metadata?.lastModified || exportResumePayload.metadata?.importedAt || '';
+    return `payload:${fallbackId}:${modified}`;
+  }, [analysisResult?.id, exportResumePayload]);
+
+  useEffect(() => {
+    if (!pdfSelectionFingerprint || !pdfSelectionModel) {
+      setPdfSelectionOverrides({});
+      return;
+    }
+    if (typeof window === 'undefined') return;
+
+    let nextOverrides: PdfSelectionOverrides = {};
+    try {
+      const raw = window.sessionStorage.getItem(PDF_SELECTION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          fingerprint?: string;
+          overrides?: PdfSelectionOverrides;
+        };
+        if (parsed?.fingerprint === pdfSelectionFingerprint) {
+          nextOverrides = normalizePdfSelectionOverrides(pdfSelectionModel, parsed.overrides || {});
+        }
+      }
+    } catch {
+      nextOverrides = {};
+    }
+
+    setPdfSelectionOverrides(prev => {
+      const prevNormalized = normalizePdfSelectionOverrides(pdfSelectionModel, prev);
+      const prevSerialized = JSON.stringify(prevNormalized);
+      const nextSerialized = JSON.stringify(nextOverrides);
+      return prevSerialized === nextSerialized ? prev : nextOverrides;
+    });
+  }, [pdfSelectionFingerprint]);
+
+  useEffect(() => {
+    if (!pdfSelectionFingerprint || !pdfSelectionModel) return;
+    if (typeof window === 'undefined') return;
+
+    const normalized = normalizePdfSelectionOverrides(pdfSelectionModel, pdfSelectionOverrides);
+    try {
+      window.sessionStorage.setItem(
+        PDF_SELECTION_STORAGE_KEY,
+        JSON.stringify({
+          fingerprint: pdfSelectionFingerprint,
+          overrides: normalized,
+        })
+      );
+    } catch {
+      // Ignore session storage write failures and keep in-memory selection state.
+    }
+  }, [pdfSelectionFingerprint, pdfSelectionModel, pdfSelectionOverrides]);
+
+  const handleTogglePdfSection = (sectionKey: string, checked: boolean) => {
+    if (!pdfSelectionModel) return;
+    setPdfSelectionOverrides(prev =>
+      togglePdfSelectionSection(pdfSelectionModel, prev, sectionKey, checked)
+    );
+  };
+
+  const handleTogglePdfItem = (itemKey: string, checked: boolean) => {
+    if (!pdfSelectionModel) return;
+    setPdfSelectionOverrides(prev =>
+      togglePdfSelectionItem(pdfSelectionModel, prev, itemKey, checked)
+    );
+  };
 
   const handleReset = () => {
     resetWorkspace();
@@ -61,7 +144,11 @@ export default function ResultsPage() {
 
     try {
       setIsExporting(true);
-      const blob = await exportResumePdf(exportResumePayload);
+      const payloadForExport: ResumePdfPayload =
+        pdfSelectionModel
+          ? filterResumePdfPayloadForSelection(exportResumePayload, pdfSelectionModel, pdfSelectionOverrides)
+          : exportResumePayload;
+      const blob = await exportResumePdf(payloadForExport);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -155,9 +242,6 @@ export default function ResultsPage() {
     company,
     overallFit,
     roleSeniority,
-    keywordGaps,
-    atsChecks,
-    recommendedEdits,
   } = analysisResult;
 
   const originalText = resumeText;
@@ -185,6 +269,11 @@ export default function ResultsPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2 md:justify-end">
+            <SectionOrderDialog
+              sections={sectionRows}
+              onOrderChange={setSectionOrder}
+              onResetOrder={() => setSectionOrder([])}
+            />
             <Button
               variant="default"
               onClick={handleDownloadPdf}
@@ -207,35 +296,19 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="diff" className="w-full">
-        <TabsList variant="line" className="w-full justify-start">
-          <TabsTrigger value="diff" className="min-w-[110px]">Diff View</TabsTrigger>
-          <TabsTrigger value="ats" className="min-w-[110px]">ATS Checks</TabsTrigger>
-          <TabsTrigger value="keywords" className="min-w-[110px]">Keywords</TabsTrigger>
-          <TabsTrigger value="todos" className="min-w-[110px]">Edits</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="diff" className="mt-5">
-          <DiffView
-            originalText={originalText}
-            changes={bulletChanges}
-            sections={sectionRows}
-            onChangesUpdate={setBulletChanges}
-          />
-        </TabsContent>
-
-        <TabsContent value="ats" className="mt-5">
-          <ATSChecks checks={atsChecks} />
-        </TabsContent>
-
-        <TabsContent value="keywords" className="mt-5">
-          <KeywordGaps gaps={keywordGaps} />
-        </TabsContent>
-
-        <TabsContent value="todos" className="mt-5">
-          <RecommendedEdits edits={recommendedEdits} />
-        </TabsContent>
-      </Tabs>
+      <section className="w-full" aria-label="Diff View">
+        <DiffView
+          originalText={originalText}
+          changes={bulletChanges}
+          sections={sectionRows}
+          onChangesUpdate={setBulletChanges}
+          onInlineEdit={applyInlineEdit}
+          pdfSelectionModel={pdfSelectionModel}
+          pdfSelectionOverrides={pdfSelectionOverrides}
+          onPdfToggleSection={handleTogglePdfSection}
+          onPdfToggleItem={handleTogglePdfItem}
+        />
+      </section>
     </div>
   );
 }

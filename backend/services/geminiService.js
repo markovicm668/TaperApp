@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 async function analyzeResume({ resumeText, jobDescription }) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-3-pro-preview",
+    model: "gemini-3.1-pro-preview",
   });
 
   console.log("-> Gemini API call initiated with model: gemini-3-pro-preview");
@@ -47,7 +47,7 @@ Rules:
 - No commentary outside JSON
 - Ensure matchScore is an integer
 - Infer targetRole and company from the JOB DESCRIPTION (or use empty string if unknown)
-- Focus exclusively on EXPERIENCE section bullets in the RESUME
+- Focus exclusively on EXPERIENCE section bullets in the RESUME, but offer suggestions for other sections if relevant
 - For each bullet, provide one improved version that is action-led and aligned to the JOB DESCRIPTION
 - Do not invent new bullets
 - "section" is optional, but when provided it must be one of: experience, projects, skills, summary
@@ -55,6 +55,15 @@ Rules:
 - "improved" should be one bullet line, action-led, and aligned to the JD
 - Keep missingKeywords, matchedKeywords, atsWarnings, suggestions empty if not obvious
 `;
+
+  console.log("-> Gemini rewrite prompt payload:", prompt);
+
+  console.log("-> Gemini rewrite input data:", {
+    resumeText,
+    jobDescription,
+    resumeTextLength: resumeText?.length ?? 0,
+    jobDescriptionLength: jobDescription?.length ?? 0,
+  });
 
   const result = await model.generateContent(prompt);
 

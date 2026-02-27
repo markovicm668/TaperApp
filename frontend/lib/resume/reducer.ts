@@ -9,6 +9,11 @@ import {
   type ResumeWorkspaceV2,
 } from '@resume-scanner/resume-contract';
 import { applyBulletChangesToResumeData } from './effective';
+import {
+  applyInlineEditToParsedMeta,
+  applyInlineEditToResumeData,
+  type ResumeInlineEditTarget,
+} from './inline-edits';
 
 export interface ResumeStoreState {
   workspace: ResumeWorkspaceV2;
@@ -29,6 +34,8 @@ export type ResumeStoreAction =
   | { type: 'setAnalysisSnapshot'; payload: { snapshot: AnalysisSnapshotV1 | null } }
   | { type: 'setParsedPayload'; payload: { parsed: AiParsedResumePayloadV2 | null } }
   | { type: 'setBulletChanges'; payload: { changes: BulletChange[] } }
+  | { type: 'setSectionOrder'; payload: { sectionOrder: string[] } }
+  | { type: 'applyInlineEdit'; payload: { target: ResumeInlineEditTarget; text: string } }
   | { type: 'resetWorkspace' };
 
 export const initialResumeStoreState: ResumeStoreState = {
@@ -128,12 +135,25 @@ export function resumeReducer(
     }
 
     case 'setParsedPayload': {
+      const existingSectionOrder = Array.isArray(state.workspace.resumeData.sectionOrder)
+        ? state.workspace.resumeData.sectionOrder
+        : [];
+      const parsedSectionOrder = Array.isArray(action.payload.parsed?.resumeData?.sectionOrder)
+        ? action.payload.parsed.resumeData.sectionOrder
+        : [];
+      const nextSectionOrder = existingSectionOrder.length
+        ? [...existingSectionOrder]
+        : [...parsedSectionOrder];
+
       const nextWorkspace: ResumeWorkspaceV2 = {
         ...state.workspace,
         ...(action.payload.parsed
           ? {
               source: action.payload.parsed.source,
-              resumeData: action.payload.parsed.resumeData,
+              resumeData: {
+                ...action.payload.parsed.resumeData,
+                sectionOrder: nextSectionOrder,
+              },
             }
           : {}),
         analysis: {
@@ -164,6 +184,56 @@ export function resumeReducer(
           analysis: {
             ...state.workspace.analysis,
             bulletChanges: action.payload.changes,
+          },
+        }),
+      };
+    }
+
+    case 'setSectionOrder': {
+      return {
+        ...state,
+        workspace: withUpdatedTimestamp({
+          ...state.workspace,
+          resumeData: {
+            ...state.workspace.resumeData,
+            sectionOrder: Array.isArray(action.payload.sectionOrder)
+              ? [...action.payload.sectionOrder]
+              : [],
+          },
+        }),
+      };
+    }
+
+    case 'applyInlineEdit': {
+      const nextResumeData = applyInlineEditToResumeData(
+        state.workspace.resumeData,
+        action.payload.target,
+        action.payload.text
+      );
+      const nextParsedMeta = applyInlineEditToParsedMeta(
+        state.workspace.analysis.ai.parsed,
+        action.payload.target,
+        action.payload.text
+      );
+
+      if (
+        nextResumeData === state.workspace.resumeData &&
+        nextParsedMeta === state.workspace.analysis.ai.parsed
+      ) {
+        return state;
+      }
+
+      return {
+        ...state,
+        workspace: withUpdatedTimestamp({
+          ...state.workspace,
+          resumeData: nextResumeData,
+          analysis: {
+            ...state.workspace.analysis,
+            ai: {
+              ...state.workspace.analysis.ai,
+              parsed: nextParsedMeta,
+            },
           },
         }),
       };

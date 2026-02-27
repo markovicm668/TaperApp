@@ -788,9 +788,7 @@ function generateResumeHtml(resume) {
       if (section.kind === 'summary') {
         contentHtml = preferLines
           ? linesHtml
-          : section.lines.length
-            ? linesHtml
-            : summaryHtml;
+          : summaryHtml || linesHtml;
       } else if (section.kind === 'work') {
         contentHtml = preferLines ? linesHtml : workHtml || linesHtml;
       } else if (section.kind === 'projects') {
