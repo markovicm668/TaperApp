@@ -300,7 +300,6 @@ export default function ResultsPage() {
         <DiffView
           originalText={originalText}
           changes={bulletChanges}
-          sections={sectionRows}
           onChangesUpdate={setBulletChanges}
           onInlineEdit={applyInlineEdit}
           pdfSelectionModel={pdfSelectionModel}

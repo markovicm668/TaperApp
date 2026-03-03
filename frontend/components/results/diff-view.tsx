@@ -37,7 +37,6 @@ import { Textarea } from '@/components/ui/textarea';
 interface DiffViewProps {
   originalText: string;
   changes: BulletChange[];
-  sections: SectionViewModelRow[];
   onChangesUpdate?: (changes: BulletChange[]) => void;
   onInlineEdit?: (target: ResumeInlineEditTarget, text: string) => void;
   pdfSelectionModel?: PdfSelectionModel | null;
@@ -190,13 +189,6 @@ function toSectionKeyFromLabel(value: string | undefined): string {
   if (/(awards?|achievements?|honors?)/.test(normalized)) return 'awards';
   if (/(languages?)/.test(normalized)) return 'languages';
   return `custom:${normalized}`;
-}
-
-function sectionKeyForRow(section: SectionViewModelRow): string {
-  if (section.kind === 'custom') {
-    return `custom:${normalizeSectionLabel(section.title)}`;
-  }
-  return section.kind;
 }
 
 function isRenderableFinalRow(row: DiffHierarchyContentRow | RenderRow): boolean {
@@ -494,7 +486,6 @@ function buildSectionRows(updatedLines: string[], sectionChanges: IndexedChange[
 export function DiffView({
   originalText,
   changes,
-  sections,
   onChangesUpdate,
   onInlineEdit,
   pdfSelectionModel = null,
@@ -531,22 +522,56 @@ export function DiffView({
     });
 
     const consumedKeys = new Set<string>();
-    const mappedSections = sections
-      .map(section => {
-        const key = sectionKeyForRow(section);
-        consumedKeys.add(key);
-        const sectionChanges = changesBySection.get(key) || [];
-        const rows = buildSectionRows(section.updatedLines, sectionChanges);
-        return {
-          id: section.key,
+    const mappedSections: SectionRenderModel[] = [];
+
+    if (pdfSelectionModel) {
+      pdfSelectionModel.sectionOrder.forEach(sectionId => {
+        const section = pdfSelectionModel.sections[sectionId];
+        if (!section) return;
+
+        const sectionKey =
+          section.kind === 'custom' && section.title
+            ? `custom:${normalizeSectionLabel(section.title)}`
+            : section.kind;
+        consumedKeys.add(sectionKey);
+
+        const sectionChanges = changesBySection.get(sectionKey) || [];
+        const updatedLines: string[] = [];
+        section.itemKeys.forEach(itemKey => {
+          const item = pdfSelectionModel.items[itemKey];
+          if (!item?.label) return;
+
+          if (
+            item.kind === 'work-entry' ||
+            item.kind === 'project-entry' ||
+            item.kind === 'education-entry' ||
+            item.kind === 'award-entry'
+          ) {
+            if (updatedLines.length > 0 && updatedLines[updatedLines.length - 1] !== '') {
+              updatedLines.push('');
+            }
+            updatedLines.push(item.label);
+            item.childKeys.forEach(childKey => {
+              const child = pdfSelectionModel.items[childKey];
+              if (child?.label) updatedLines.push(child.label);
+            });
+            return;
+          }
+
+          updatedLines.push(item.label);
+        });
+
+        const rows = buildSectionRows(updatedLines, sectionChanges);
+        mappedSections.push({
+          id: sectionId,
           title: section.title,
           kind: section.kind,
-          changed: section.changed || sectionChanges.length > 0,
+          changed: sectionChanges.length > 0,
           changeCount: sectionChanges.length,
           rows,
-        };
-      })
-      .filter(section => section.rows.length > 0 || section.changeCount > 0);
+        });
+      });
+    }
 
     const unmappedSections: SectionRenderModel[] = [];
     for (const [key, sectionChanges] of changesBySection.entries()) {
@@ -562,7 +587,7 @@ export function DiffView({
     }
 
     return [...mappedSections, ...unmappedSections];
-  }, [sections, localChanges]);
+  }, [localChanges, pdfSelectionModel]);
 
   useEffect(() => {
     if (sectionModels.length === 0) {
