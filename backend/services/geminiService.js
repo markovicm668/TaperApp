@@ -12,7 +12,7 @@ async function analyzeResume({ resumeText, jobDescription }) {
   console.log("-> Gemini API call initiated with model: gemini-3-pro-preview");
 
   const prompt = `
-You are an ATS resume bullet optimizer. Your sole focus is improving EXPERIENCE section bullets.
+You are an ATS resume optimizer. Focus on improving resume lines while preserving truthfulness.
 
 JOB DESCRIPTION:
 ${jobDescription}
@@ -29,9 +29,11 @@ Return STRICT JSON ONLY with this schema:
   "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
   "missingKeywords": string[],
   "matchedKeywords": string[],
-  "rewrittenBullets": [
+  "rewrittenLines": [
     {
       "section": "experience" | "projects" | "skills" | "summary" (optional),
+      "kind": "bullet" | "skills-category" | "skills-item" (optional),
+      "category": string (optional, for skills-category or skills-item),
       "original": string,
       "improved": string,
       "rationale": string
@@ -47,12 +49,14 @@ Rules:
 - No commentary outside JSON
 - Ensure matchScore is an integer
 - Infer targetRole and company from the JOB DESCRIPTION (or use empty string if unknown)
-- Focus exclusively on EXPERIENCE section bullets in the RESUME, but offer suggestions for other sections if relevant
-- For each bullet, provide one improved version that is action-led and aligned to the JOB DESCRIPTION
-- Do not invent new bullets
-- "section" is optional, but when provided it must be one of: experience, projects, skills, summary
-- "original" must be verbatim from the resume bullet text
-- "improved" should be one bullet line, action-led, and aligned to the JD
+- Prioritize EXPERIENCE bullets, but include PROJECTS, SUMMARY, and SKILLS when there is an obvious improvement.
+- For SKILLS edits, you may rewrite both skill category labels (for example: "Technical:") and skill entries inside a category.
+- Do not invent new claims, employers, dates, tools, or achievements.
+- "section" is optional, but when provided it must be one of: experience, projects, skills, summary.
+- "kind" is optional, but when provided it must be one of: bullet, skills-category, skills-item.
+- "category" is optional metadata for SKILLS rewrites.
+- "original" must be verbatim from a resume line.
+- "improved" should keep the same factual meaning while improving clarity and JD alignment.
 - Keep missingKeywords, matchedKeywords, atsWarnings, suggestions empty if not obvious
 `;
 

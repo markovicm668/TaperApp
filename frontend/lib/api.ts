@@ -218,6 +218,7 @@ export async function analyzeResume(
     company?: string;
     missingKeywords?: string[];
     rewrittenBullets?: Array<{ section?: string; original?: string; improved?: string }>;
+    rewrittenLines?: Array<{ section?: string; original?: string; improved?: string }>;
     rewriteSuggestions?: Array<{
       section?: string;
       originalText?: string;
@@ -247,7 +248,7 @@ export async function analyzeResume(
       category: 'Missing keyword',
     })),
 
-    bulletChanges: (ai.rewrittenBullets || []).map(b => ({
+    bulletChanges: (ai.rewrittenLines || ai.rewrittenBullets || []).map(b => ({
       section: normalizeBulletSection(b.section),
       original: b.original ?? '',
       improved: b.improved ?? '',
