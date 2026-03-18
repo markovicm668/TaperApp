@@ -1569,11 +1569,15 @@ export function DiffView({
         const selectionContext = createSectionSelectionContext(section.id, pdfSelectionModel);
         const hasSectionSelection = Boolean(pdfSelectionModel?.sections[section.id]);
         const sectionState = hasSectionSelection ? getSectionCheckState(section.id) : 'checked';
+        const sectionSummary =
+          section.changeCount > 0
+            ? `${section.changeCount} highlighted change${section.changeCount === 1 ? '' : 's'} in this section.`
+            : 'No highlighted changes in this section.';
         return (
-          <Card key={section.id} className="border-border/85 bg-card/92">
-            <CardHeader className="pb-3">
+          <Card key={section.id} className={cn('border-border/85 bg-card/92', !isExpanded && 'py-3')}>
+            <CardHeader className={cn('pb-3', !isExpanded && 'pb-0')}>
               <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-start gap-2">
+                <div className={cn('flex min-w-0 flex-1 gap-2', isExpanded ? 'items-start' : 'items-center')}>
                   <TriStateCheckbox
                     state={sectionState}
                     disabled={!hasSectionSelection}
@@ -1584,20 +1588,16 @@ export function DiffView({
                     type="button"
                     aria-expanded={isExpanded}
                     onClick={() => toggleSection(section.id)}
-                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                    className={cn('flex min-w-0 flex-1 gap-2 text-left', isExpanded ? 'items-start' : 'items-center')}
                   >
                     {isExpanded ? (
                       <ChevronDown className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     ) : (
-                      <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     )}
                     <div className={cn('min-w-0', sectionState === 'unchecked' && 'opacity-60')}>
                       <CardTitle className="text-base">{section.title}</CardTitle>
-                      <CardDescription>
-                        {section.changeCount > 0
-                          ? `${section.changeCount} highlighted change${section.changeCount === 1 ? '' : 's'} in this section.`
-                          : 'No highlighted changes in this section.'}
-                      </CardDescription>
+                      {isExpanded && <CardDescription>{sectionSummary}</CardDescription>}
                     </div>
                   </button>
                 </div>
