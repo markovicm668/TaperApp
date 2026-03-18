@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 interface DiffViewProps {
-  originalText: string;
+  hasOriginal: boolean;
   changes: BulletChange[];
   onChangesUpdate?: (changes: BulletChange[]) => void;
   onInlineEdit?: (target: ResumeInlineEditTarget, text: string) => void;
@@ -484,7 +484,7 @@ function buildSectionRows(updatedLines: string[], sectionChanges: IndexedChange[
 }
 
 export function DiffView({
-  originalText,
+  hasOriginal,
   changes,
   onChangesUpdate,
   onInlineEdit,
@@ -502,8 +502,6 @@ export function DiffView({
   useEffect(() => {
     setLocalChanges(changes);
   }, [changes]);
-
-  const hasOriginal = Boolean(originalText.trim());
 
   const sectionModels = useMemo<SectionRenderModel[]>(() => {
     const indexedChanges: IndexedChange[] = localChanges.map((change, index) => ({

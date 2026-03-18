@@ -4,7 +4,8 @@ import { safeParseResumeWorkspace } from '@resume-scanner/resume-contract';
 import type { AnalysisResult } from '../types.ts';
 import { analysisResultToSnapshot } from './mappers.ts';
 import { initialResumeStoreState, resumeReducer } from './reducer.ts';
-import { selectEffectiveSectionViewModel } from './selectors.ts';
+import { buildSectionViewModel } from './mappers.ts';
+import { selectParsedResumeSections } from './selectors.ts';
 
 function sampleAnalysisResult(): AnalysisResult {
   return {
@@ -441,7 +442,10 @@ test('selectEffectiveSectionViewModel includes canonical header fallback when pa
     },
   });
 
-  const rows = selectEffectiveSectionViewModel(state);
+  const rows = buildSectionViewModel({
+    parsedSections: selectParsedResumeSections(state),
+    resumeData: state.workspace.resumeData,
+  });
   const header = rows.find(row => row.key === 'canonical-header');
   assert.ok(header);
   assert.equal(header?.originalValue.includes('Luka Petrovic'), true);

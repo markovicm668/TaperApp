@@ -16,8 +16,7 @@ import {
   useExportPayload,
   useIsResumeHydrated,
   useLastAnalysisResult,
-  useResumeText,
-  useSectionViewModel,
+  useEffectiveSectionViewModel,
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
 import {
@@ -36,9 +35,8 @@ export default function ResultsPage() {
   const isHydrated = useIsResumeHydrated();
   const analysisResult = useLastAnalysisResult();
   const canonicalParsePayload = useCanonicalParsePayload();
-  const resumeText = useResumeText();
   const bulletChanges = useBulletChanges();
-  const sectionRows = useSectionViewModel();
+  const sectionRows = useEffectiveSectionViewModel();
   const { setBulletChanges, setSectionOrder, applyInlineEdit, resetWorkspace } = useResumeActions();
   const [isExporting, setIsExporting] = useState(false);
   const [isCopyingJson, setIsCopyingJson] = useState(false);
@@ -244,7 +242,7 @@ export default function ResultsPage() {
     roleSeniority,
   } = analysisResult;
 
-  const originalText = resumeText;
+  const hasOriginal = sectionRows.some(row => row.hasContent);
   const hasResumePayload = Boolean(exportResumePayload);
 
   return (
@@ -298,7 +296,7 @@ export default function ResultsPage() {
 
       <section className="w-full" aria-label="Diff View">
         <DiffView
-          originalText={originalText}
+          hasOriginal={hasOriginal}
           changes={bulletChanges}
           onChangesUpdate={setBulletChanges}
           onInlineEdit={applyInlineEdit}

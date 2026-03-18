@@ -6,7 +6,6 @@ import type {
   ResumeSectionBlockV2,
   ResumeWorkItemV2,
 } from '@resume-scanner/resume-contract';
-import { applyBulletChangesToText } from '../text-patcher';
 import { buildSectionViewModel, type SectionViewModelRow } from './mappers';
 
 const LIST_PREFIX_RE = /^\s*(?:[-*•●▪◦–—−]|(?:\(?\d{1,3}[.)]))\s+/u;
@@ -469,23 +468,11 @@ export function applyBulletChangesToResumeData(
   };
 }
 
-export function materializeEffectiveResumeText(
-  rawText: string,
-  bulletChanges: BulletChange[]
-): string {
-  if (!rawText.trim()) return '';
-  return applyBulletChangesToText(rawText, bulletChanges).updatedText;
-}
-
 export function materializeEffectiveSections(
-  rawText: string,
-  bulletChanges: BulletChange[],
   parsedSections?: ResumeSectionBlockV2[] | null,
   resumeData?: ResumeDataV2
 ): SectionViewModelRow[] {
   return buildSectionViewModel({
-    originalText: rawText || '',
-    updatedText: materializeEffectiveResumeText(rawText || '', bulletChanges),
     parsedSections,
     resumeData,
   });

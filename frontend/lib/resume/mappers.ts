@@ -523,48 +523,6 @@ function sanitizeParsedSections(parsedSections: ResumeSectionBlockV2[]): ParsedS
   });
 }
 
-function getNextHeadingIndex(sections: ParsedSectionShape[], fromIndex: number): number {
-  for (let index = fromIndex; index < sections.length; index += 1) {
-    if (sections[index].headingKey) return index;
-  }
-  return -1;
-}
-
-function parseTextByParsedSections(resumeText: string, parsedSections: ParsedSectionShape[]): Map<string, string[]> {
-  const buckets = new Map<string, string[]>();
-  parsedSections.forEach(section => buckets.set(section.key, []));
-
-  if (!parsedSections.length) return buckets;
-
-  let currentIndex = parsedSections.findIndex(section => section.headingKey === null);
-  if (currentIndex === -1) {
-    currentIndex = 0;
-  }
-
-  let nextHeadingIndex = getNextHeadingIndex(parsedSections, 0);
-
-  for (const rawLine of resumeText.split(/\r?\n/)) {
-    const normalized = normalizeHeading(rawLine);
-
-    if (
-      nextHeadingIndex !== -1 &&
-      parsedSections[nextHeadingIndex].headingKey === normalized
-    ) {
-      currentIndex = nextHeadingIndex;
-      nextHeadingIndex = getNextHeadingIndex(parsedSections, nextHeadingIndex + 1);
-      continue;
-    }
-
-    const currentSection = parsedSections[currentIndex];
-    const bucket = buckets.get(currentSection.key);
-    if (bucket) {
-      bucket.push(rawLine);
-    }
-  }
-
-  return buckets;
-}
-
 function inferSectionKindFromTitle(title: string): CanonicalSectionKind | 'custom' {
   const normalized = normalizeHeading(title);
   if (/^header$/.test(normalized)) return 'header';
@@ -644,20 +602,15 @@ function orderSectionRowsForUserPreference(
 }
 
 export function buildSectionViewModel(options: {
-  originalText: string;
-  updatedText: string;
   parsedSections?: ResumeSectionBlockV2[] | null;
   resumeData?: ResumeDataV2;
 }): SectionViewModelRow[] {
-  const originalText = options.originalText || '';
-  const updatedText = options.updatedText || originalText;
-  const hasCanonicalResumeData = Boolean(options.resumeData);
   const parsedSections =
     Array.isArray(options.parsedSections) && options.parsedSections.length > 0
       ? sanitizeParsedSections(options.parsedSections)
       : [];
-  const fallbackOriginalByKind = buildCanonicalFallbackLines(options.resumeData, 'original');
-  const fallbackUpdatedByKind = buildCanonicalFallbackLines(options.resumeData, 'updated');
+  const canonicalOriginalByKind = buildCanonicalFallbackLines(options.resumeData, 'original');
+  const canonicalUpdatedByKind = buildCanonicalFallbackLines(options.resumeData, 'updated');
 
   if (!parsedSections.length) {
     const rows = CANONICAL_SECTION_ORDER.map(kind =>
@@ -666,50 +619,36 @@ export function buildSectionViewModel(options: {
         id: `canonical-${kind}`,
         title: CANONICAL_SECTION_TITLES[kind],
         kind,
-        originalLines: fallbackOriginalByKind[kind],
-        updatedLines: fallbackUpdatedByKind[kind],
+        originalLines: canonicalOriginalByKind[kind],
+        updatedLines: canonicalUpdatedByKind[kind],
         isCustom: false,
       })
     );
     return orderSectionRowsForUserPreference(rows, options.resumeData?.sectionOrder);
   }
 
-  const updatedBySection = parseTextByParsedSections(updatedText, parsedSections);
   const canonicalRows = CANONICAL_SECTION_ORDER.map(kind => {
     const matching = parsedSections.filter(section => toRowKind(section) === kind);
-    const parsedOriginalLines = combineLineGroups(matching.map(section => section.lines));
-    const parsedUpdatedLines = combineLineGroups(
-      matching.map(section => updatedBySection.get(section.key) || [])
-    );
-    const preferParsedLines = kind === 'header' || kind === 'summary';
-    const canonicalOriginalLines = fallbackOriginalByKind[kind];
-    const canonicalUpdatedLines = fallbackUpdatedByKind[kind];
-    let originalLines = preferParsedLines
-      ? (parsedOriginalLines.length ? parsedOriginalLines : canonicalOriginalLines)
-      : (canonicalOriginalLines.length ? canonicalOriginalLines : parsedOriginalLines);
-    let updatedLines = preferParsedLines
-      ? (parsedUpdatedLines.length ? parsedUpdatedLines : canonicalUpdatedLines)
-      : (
-          canonicalUpdatedLines.length
-            ? canonicalUpdatedLines
-            : hasCanonicalResumeData
-              ? parsedOriginalLines
-              : parsedUpdatedLines
-        );
+    const parsedLines = combineLineGroups(matching.map(section => section.lines));
+    const canonicalOriginalLines = canonicalOriginalByKind[kind];
+    const canonicalUpdatedLines = canonicalUpdatedByKind[kind];
+
+    // For header: prefer parsed lines if they're short and don't contain section headings.
+    // For other sections: prefer canonical lines (from structured resumeData) since they
+    // reflect inline edits and bullet changes applied by the reducer.
+    let originalLines: string[];
+    let updatedLines: string[];
 
     if (kind === 'header') {
-      originalLines = shouldUseParsedHeaderLines(parsedOriginalLines, canonicalOriginalLines)
-        ? parsedOriginalLines
-        : canonicalOriginalLines;
-      updatedLines = shouldUseParsedHeaderLines(parsedUpdatedLines, canonicalUpdatedLines)
-        ? parsedUpdatedLines
-        : canonicalUpdatedLines;
-    }
-
-    if (kind === 'summary') {
-      // Summary inline edits write to canonical resumeData.summary.
-      // Prefer canonical updated lines so the in-app preview matches export payloads.
-      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedUpdatedLines;
+      const useParsed = shouldUseParsedHeaderLines(parsedLines, canonicalOriginalLines);
+      originalLines = useParsed ? parsedLines : canonicalOriginalLines;
+      updatedLines = useParsed ? parsedLines : canonicalUpdatedLines;
+    } else if (kind === 'summary') {
+      originalLines = parsedLines.length ? parsedLines : canonicalOriginalLines;
+      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedLines;
+    } else {
+      originalLines = canonicalOriginalLines.length ? canonicalOriginalLines : parsedLines;
+      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedLines;
     }
 
     const title = matching[0]?.title || CANONICAL_SECTION_TITLES[kind];
@@ -734,8 +673,6 @@ export function buildSectionViewModel(options: {
         title: section.title,
         kind: 'custom',
         originalLines: section.lines,
-        // Custom sections currently do not participate in structured bullet edits.
-        // Prefer parsed section lines to avoid raw-text re-segmentation drift on multi-column resumes.
         updatedLines: section.lines,
         isCustom: true,
       })
