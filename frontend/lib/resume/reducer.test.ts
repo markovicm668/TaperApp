@@ -4,7 +4,8 @@ import { safeParseResumeWorkspace } from '@resume-scanner/resume-contract';
 import type { AnalysisResult } from '../types.ts';
 import { analysisResultToSnapshot } from './mappers.ts';
 import { initialResumeStoreState, resumeReducer } from './reducer.ts';
-import { selectEffectiveSectionViewModel } from './selectors.ts';
+import { buildSectionViewModel } from './mappers.ts';
+import { selectParsedResumeSections } from './selectors.ts';
 
 function sampleAnalysisResult(): AnalysisResult {
   return {
@@ -25,6 +26,7 @@ function sampleAnalysisResult(): AnalysisResult {
         type: 'modified',
       },
     ],
+    skillCategoryRenames: [],
     rewriteSuggestions: [],
     atsChecks: [],
     riskFlags: [],
@@ -441,7 +443,10 @@ test('selectEffectiveSectionViewModel includes canonical header fallback when pa
     },
   });
 
-  const rows = selectEffectiveSectionViewModel(state);
+  const rows = buildSectionViewModel({
+    parsedSections: selectParsedResumeSections(state),
+    resumeData: state.workspace.resumeData,
+  });
   const header = rows.find(row => row.key === 'canonical-header');
   assert.ok(header);
   assert.equal(header?.originalValue.includes('Luka Petrovic'), true);
@@ -660,4 +665,155 @@ test('applyInlineEdit updates project technologies, education honors, and custom
   assert.equal(afterCustom.workspace.resumeData.education[0]?.honors?.[1], 'Merit Scholarship');
   assert.equal(afterCustom.workspace.resumeData.customSections[0]?.items?.[0]?.text, 'Paper B');
   assert.equal(afterCustom.workspace.analysis.ai.parsed?.customSections?.[0]?.lines?.[0], 'Paper B');
+});
+
+test('added skills with [Category] prefix get assigned to the correct category', () => {
+  const withParsed = resumeReducer(initialResumeStoreState, {
+    type: 'setParsedPayload',
+    payload: {
+      parsed: {
+        version: '2',
+        source: {
+          inputType: 'text',
+          rawText: 'Jane Doe\n\nSkills\nTypeScript',
+          importedAt: '2026-02-07T00:00:00.000Z',
+          parser: 'gemini-section-parser-v2',
+          parsedAt: '2026-02-07T00:00:00.000Z',
+        },
+        resumeData: {
+          work: [],
+          education: [],
+          projects: [],
+          awards: [],
+          skills: [
+            { name: 'TypeScript', category: 'Technical' },
+            { name: 'Communication', category: 'Soft Skills' },
+          ],
+          languages: [],
+        },
+        notes: [],
+      },
+    },
+  });
+
+  const result = sampleAnalysisResult();
+  result.bulletChanges = [
+    { section: 'skills', type: 'added', original: '', improved: '[Technical] Docker' },
+    { section: 'skills', type: 'added', original: '', improved: '[Soft Skills] Leadership' },
+  ];
+  const snapshot = analysisResultToSnapshot(result);
+
+  const next = resumeReducer(withParsed, {
+    type: 'setAnalysisSnapshot',
+    payload: { snapshot },
+  });
+
+  const docker = next.workspace.resumeData.skills.find(s => s.name === 'Docker');
+  const leadership = next.workspace.resumeData.skills.find(s => s.name === 'Leadership');
+  assert.equal(docker?.category, 'Technical');
+  assert.equal(leadership?.category, 'Soft Skills');
+
+  // Bracket prefix should be stripped from stored bulletChanges
+  const storedChanges = next.workspace.analysis.bulletChanges;
+  assert.equal(storedChanges.find(c => c.improved === 'Docker')?.improved, 'Docker');
+  assert.equal(storedChanges.find(c => c.improved === 'Leadership')?.improved, 'Leadership');
+
+  // Added skills should be next to their category peers, not at the end
+  const skillNames = next.workspace.resumeData.skills.map(s => s.name);
+  const dockerIdx = skillNames.indexOf('Docker');
+  const tsIdx = skillNames.indexOf('TypeScript');
+  const leadershipIdx = skillNames.indexOf('Leadership');
+  const commIdx = skillNames.indexOf('Communication');
+  assert.ok(dockerIdx > tsIdx, 'Docker should be after TypeScript (same category)');
+  assert.ok(leadershipIdx > commIdx, 'Leadership should be after Communication (same category)');
+  assert.ok(dockerIdx < commIdx, 'Docker (Technical) should be before Communication (Soft Skills)');
+});
+
+test('added skills without [Category] prefix fall back to first existing category', () => {
+  const withParsed = resumeReducer(initialResumeStoreState, {
+    type: 'setParsedPayload',
+    payload: {
+      parsed: {
+        version: '2',
+        source: {
+          inputType: 'text',
+          rawText: 'Jane Doe\n\nSkills\nTypeScript',
+          importedAt: '2026-02-07T00:00:00.000Z',
+          parser: 'gemini-section-parser-v2',
+          parsedAt: '2026-02-07T00:00:00.000Z',
+        },
+        resumeData: {
+          work: [],
+          education: [],
+          projects: [],
+          awards: [],
+          skills: [{ name: 'TypeScript', category: 'Programming' }],
+          languages: [],
+        },
+        notes: [],
+      },
+    },
+  });
+
+  const result = sampleAnalysisResult();
+  result.bulletChanges = [
+    { section: 'skills', type: 'added', original: '', improved: 'Kubernetes' },
+  ];
+  const snapshot = analysisResultToSnapshot(result);
+
+  const next = resumeReducer(withParsed, {
+    type: 'setAnalysisSnapshot',
+    payload: { snapshot },
+  });
+
+  const k8s = next.workspace.resumeData.skills.find(s => s.name === 'Kubernetes');
+  assert.equal(k8s?.category, 'Programming');
+});
+
+test('skillCategoryRenames renames categories of existing skills', () => {
+  const withParsed = resumeReducer(initialResumeStoreState, {
+    type: 'setParsedPayload',
+    payload: {
+      parsed: {
+        version: '2',
+        source: {
+          inputType: 'text',
+          rawText: 'Jane Doe\n\nSkills\nReact',
+          importedAt: '2026-02-07T00:00:00.000Z',
+          parser: 'gemini-section-parser-v2',
+          parsedAt: '2026-02-07T00:00:00.000Z',
+        },
+        resumeData: {
+          work: [],
+          education: [],
+          projects: [],
+          awards: [],
+          skills: [
+            { name: 'React', category: 'Tools' },
+            { name: 'Node.js', category: 'Tools' },
+            { name: 'Teamwork', category: 'Soft' },
+          ],
+          languages: [],
+        },
+        notes: [],
+      },
+    },
+  });
+
+  const result = sampleAnalysisResult();
+  result.bulletChanges = [];
+  result.skillCategoryRenames = [{ from: 'Tools', to: 'Frontend & Backend' }];
+  const snapshot = analysisResultToSnapshot(result);
+
+  const next = resumeReducer(withParsed, {
+    type: 'setAnalysisSnapshot',
+    payload: { snapshot },
+  });
+
+  const react = next.workspace.resumeData.skills.find(s => s.name === 'React');
+  const node = next.workspace.resumeData.skills.find(s => s.name === 'Node.js');
+  const teamwork = next.workspace.resumeData.skills.find(s => s.name === 'Teamwork');
+  assert.equal(react?.category, 'Frontend & Backend');
+  assert.equal(node?.category, 'Frontend & Backend');
+  assert.equal(teamwork?.category, 'Soft');
 });

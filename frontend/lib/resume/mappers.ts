@@ -24,16 +24,7 @@ import {
   applySectionOrderToItems,
   getSectionOrderKeyForExportSection,
 } from './section-order';
-
-type CanonicalSectionKind =
-  | 'header'
-  | 'summary'
-  | 'work'
-  | 'projects'
-  | 'skills'
-  | 'education'
-  | 'awards'
-  | 'languages';
+import { dedupeSections, nonEmpty, type CanonicalSectionKind } from './normalize';
 
 type SectionRowKind = CanonicalSectionKind | 'custom';
 
@@ -189,33 +180,28 @@ function combineLineGroups(groups: string[][]): string[] {
   }, []);
 }
 
-function toNonEmptyLine(value: unknown): string | undefined {
-  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
-  const normalized = String(value).trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
 
 function formatLocation(location: ResumeLocationV2 | undefined): string | undefined {
   if (!location) return undefined;
 
   const primaryParts = [
-    toNonEmptyLine(location.city),
-    toNonEmptyLine(location.region),
-    toNonEmptyLine(location.country),
+    nonEmpty(location.city),
+    nonEmpty(location.region),
+    nonEmpty(location.country),
   ].filter(Boolean);
   if (primaryParts.length) return primaryParts.join(', ');
 
   const secondaryParts = [
-    toNonEmptyLine(location.address),
-    toNonEmptyLine(location.postalCode),
-    toNonEmptyLine(location.countryCode),
+    nonEmpty(location.address),
+    nonEmpty(location.postalCode),
+    nonEmpty(location.countryCode),
   ].filter(Boolean);
   return secondaryParts.length ? secondaryParts.join(', ') : undefined;
 }
 
 function formatDateRange(start: string | undefined, end: string | undefined, isCurrent?: boolean): string | undefined {
-  const normalizedStart = toNonEmptyLine(start);
-  const normalizedEnd = toNonEmptyLine(end) || (isCurrent ? 'Present' : undefined);
+  const normalizedStart = nonEmpty(start);
+  const normalizedEnd = nonEmpty(end) || (isCurrent ? 'Present' : undefined);
   if (normalizedStart && normalizedEnd) return `${normalizedStart} - ${normalizedEnd}`;
   return normalizedStart || normalizedEnd;
 }
@@ -224,23 +210,23 @@ function buildHeaderLinesFromBasics(basics: ResumeBasicsV2 | undefined): string[
   if (!basics) return [];
 
   const lines: string[] = [];
-  const title = toNonEmptyLine(basics.title) || toNonEmptyLine(basics.label);
+  const title = nonEmpty(basics.title) || nonEmpty(basics.label);
 
   const pushLine = (line: string | undefined) => {
     if (line) lines.push(line);
   };
 
-  pushLine(toNonEmptyLine(basics.name));
+  pushLine(nonEmpty(basics.name));
   pushLine(title);
   pushLine(formatLocation(basics.location));
-  pushLine(toNonEmptyLine(basics.phone));
-  pushLine(toNonEmptyLine(basics.email));
-  pushLine(toNonEmptyLine(basics.url));
+  pushLine(nonEmpty(basics.phone));
+  pushLine(nonEmpty(basics.email));
+  pushLine(nonEmpty(basics.url));
 
   const profiles = Array.isArray(basics.profiles) ? basics.profiles : [];
   profiles.forEach(profile => {
-    const label = toNonEmptyLine(profile.network) || toNonEmptyLine(profile.username);
-    const url = toNonEmptyLine(profile.url);
+    const label = nonEmpty(profile.network) || nonEmpty(profile.username);
+    const url = nonEmpty(profile.url);
     if (label && url) {
       pushLine(`${label}: ${url}`);
       return;
@@ -252,7 +238,7 @@ function buildHeaderLinesFromBasics(basics: ResumeBasicsV2 | undefined): string[
 }
 
 function buildSummaryLines(summary: string | undefined): string[] {
-  const normalized = toNonEmptyLine(summary);
+  const normalized = nonEmpty(summary);
   return normalized ? [normalized] : [];
 }
 
@@ -262,9 +248,9 @@ function resolveHighlightText(
 ): string | undefined {
   if (!highlight) return undefined;
   if (mode === 'original') {
-    return toNonEmptyLine(highlight.originalText) || toNonEmptyLine(highlight.text);
+    return nonEmpty(highlight.originalText) || nonEmpty(highlight.text);
   }
-  return toNonEmptyLine(highlight.text) || toNonEmptyLine(highlight.originalText);
+  return nonEmpty(highlight.text) || nonEmpty(highlight.originalText);
 }
 
 function buildWorkLines(work: ResumeWorkItemV2[] | undefined, mode: 'original' | 'updated'): string[] {
@@ -273,8 +259,8 @@ function buildWorkLines(work: ResumeWorkItemV2[] | undefined, mode: 'original' |
 
   entries.forEach(entry => {
     const entryLines: string[] = [];
-    const position = toNonEmptyLine(entry.position);
-    const company = toNonEmptyLine(entry.company);
+    const position = nonEmpty(entry.position);
+    const company = nonEmpty(entry.company);
     const roleLine =
       position && company
         ? `${position} - ${company}`
@@ -306,18 +292,18 @@ function buildProjectLines(projects: ResumeProjectItemV2[] | undefined, mode: 'o
 
   entries.forEach(entry => {
     const entryLines: string[] = [];
-    const name = toNonEmptyLine(entry.name);
-    const role = toNonEmptyLine(entry.role);
+    const name = nonEmpty(entry.name);
+    const role = nonEmpty(entry.role);
     const heading = name && role ? `${name} - ${role}` : name || role;
     if (heading) entryLines.push(heading);
 
     const dateRange = formatDateRange(entry.startDate, entry.endDate, false);
     if (dateRange) entryLines.push(dateRange);
-    const description = toNonEmptyLine(entry.description);
+    const description = nonEmpty(entry.description);
     if (description) entryLines.push(description);
 
     const technologies = (Array.isArray(entry.technologies) ? entry.technologies : [])
-      .map(technology => toNonEmptyLine(technology.name))
+      .map(technology => nonEmpty(technology.name))
       .filter(Boolean);
     if (technologies.length) entryLines.push(`Technologies: ${technologies.join(', ')}`);
 
@@ -341,11 +327,11 @@ function buildEducationLines(education: ResumeEducationItemV2[] | undefined): st
 
   entries.forEach(entry => {
     const entryLines: string[] = [];
-    const institution = toNonEmptyLine(entry.institution);
+    const institution = nonEmpty(entry.institution);
     if (institution) entryLines.push(institution);
 
-    const degree = toNonEmptyLine(entry.degree) || toNonEmptyLine(entry.studyType);
-    const area = toNonEmptyLine(entry.area);
+    const degree = nonEmpty(entry.degree) || nonEmpty(entry.studyType);
+    const area = nonEmpty(entry.area);
     const degreeLine =
       degree && area
         ? `${degree}, ${area}`
@@ -358,13 +344,13 @@ function buildEducationLines(education: ResumeEducationItemV2[] | undefined): st
     const location = formatLocation(entry.location);
     if (location) entryLines.push(location);
 
-    const gpa = toNonEmptyLine(entry.gpa);
+    const gpa = nonEmpty(entry.gpa);
     if (gpa) entryLines.push(`GPA: ${gpa}`);
 
     const honors = Array.isArray(entry.honors) ? entry.honors : [];
     honors
-      .map(honor => toNonEmptyLine(honor))
-      .filter(Boolean)
+      .map(honor => nonEmpty(honor))
+      .filter((h): h is string => Boolean(h))
       .forEach(honor => {
         entryLines.push(honor);
       });
@@ -382,10 +368,10 @@ function buildSkillsLines(skills: ResumeSkillItemV2[] | undefined): string[] {
   const grouped = new Map<string, string[]>();
 
   entries.forEach(entry => {
-    const name = toNonEmptyLine(entry.name);
+    const name = nonEmpty(entry.name);
     if (!name) return;
 
-    const category = toNonEmptyLine(entry.category) || 'General';
+    const category = nonEmpty(entry.category) || 'General';
     const existing = grouped.get(category) || [];
     if (!existing.includes(name)) {
       existing.push(name);
@@ -408,10 +394,10 @@ function buildAwardsLines(awards: ResumeAwardItemV2[] | undefined): string[] {
   const lines: string[] = [];
 
   entries.forEach(entry => {
-    const title = toNonEmptyLine(entry.title);
-    const issuer = toNonEmptyLine(entry.issuer);
-    const date = toNonEmptyLine(entry.date);
-    const summary = toNonEmptyLine(entry.summary);
+    const title = nonEmpty(entry.title);
+    const issuer = nonEmpty(entry.issuer);
+    const date = nonEmpty(entry.date);
+    const summary = nonEmpty(entry.summary);
 
     const entryLines: string[] = [];
     const heading = title && issuer ? `${title} - ${issuer}` : title || issuer;
@@ -431,29 +417,14 @@ function buildLanguagesLines(languages: ResumeLanguageItemV2[] | undefined): str
   const entries = Array.isArray(languages) ? languages : [];
   return entries
     .map(entry => {
-      const language = toNonEmptyLine(entry.language);
-      const fluency = toNonEmptyLine(entry.fluency);
+      const language = nonEmpty(entry.language);
+      const fluency = nonEmpty(entry.fluency);
       if (language && fluency) return `${language} - ${fluency}`;
       return language || fluency;
     })
     .filter((line): line is string => Boolean(line));
 }
 
-function buildCanonicalFallbackLines(
-  resumeData: ResumeDataV2 | undefined,
-  mode: 'original' | 'updated'
-): Record<CanonicalSectionKind, string[]> {
-  return {
-    header: buildHeaderLinesFromBasics(resumeData?.basics),
-    summary: buildSummaryLines(resumeData?.summary),
-    work: buildWorkLines(resumeData?.work, mode),
-    projects: buildProjectLines(resumeData?.projects, mode),
-    skills: buildSkillsLines(resumeData?.skills),
-    education: buildEducationLines(resumeData?.education),
-    awards: buildAwardsLines(resumeData?.awards),
-    languages: buildLanguagesLines(resumeData?.languages),
-  };
-}
 
 function mapSectionKind(kind: string): ResumeSectionKindV2 {
   if (kind === 'experience') return 'work';
@@ -521,48 +492,6 @@ function sanitizeParsedSections(parsedSections: ResumeSectionBlockV2[]): ParsedS
       lines,
     };
   });
-}
-
-function getNextHeadingIndex(sections: ParsedSectionShape[], fromIndex: number): number {
-  for (let index = fromIndex; index < sections.length; index += 1) {
-    if (sections[index].headingKey) return index;
-  }
-  return -1;
-}
-
-function parseTextByParsedSections(resumeText: string, parsedSections: ParsedSectionShape[]): Map<string, string[]> {
-  const buckets = new Map<string, string[]>();
-  parsedSections.forEach(section => buckets.set(section.key, []));
-
-  if (!parsedSections.length) return buckets;
-
-  let currentIndex = parsedSections.findIndex(section => section.headingKey === null);
-  if (currentIndex === -1) {
-    currentIndex = 0;
-  }
-
-  let nextHeadingIndex = getNextHeadingIndex(parsedSections, 0);
-
-  for (const rawLine of resumeText.split(/\r?\n/)) {
-    const normalized = normalizeHeading(rawLine);
-
-    if (
-      nextHeadingIndex !== -1 &&
-      parsedSections[nextHeadingIndex].headingKey === normalized
-    ) {
-      currentIndex = nextHeadingIndex;
-      nextHeadingIndex = getNextHeadingIndex(parsedSections, nextHeadingIndex + 1);
-      continue;
-    }
-
-    const currentSection = parsedSections[currentIndex];
-    const bucket = buckets.get(currentSection.key);
-    if (bucket) {
-      bucket.push(rawLine);
-    }
-  }
-
-  return buckets;
 }
 
 function inferSectionKindFromTitle(title: string): CanonicalSectionKind | 'custom' {
@@ -644,20 +573,31 @@ function orderSectionRowsForUserPreference(
 }
 
 export function buildSectionViewModel(options: {
-  originalText: string;
-  updatedText: string;
   parsedSections?: ResumeSectionBlockV2[] | null;
   resumeData?: ResumeDataV2;
 }): SectionViewModelRow[] {
-  const originalText = options.originalText || '';
-  const updatedText = options.updatedText || originalText;
-  const hasCanonicalResumeData = Boolean(options.resumeData);
   const parsedSections =
     Array.isArray(options.parsedSections) && options.parsedSections.length > 0
       ? sanitizeParsedSections(options.parsedSections)
       : [];
-  const fallbackOriginalByKind = buildCanonicalFallbackLines(options.resumeData, 'original');
-  const fallbackUpdatedByKind = buildCanonicalFallbackLines(options.resumeData, 'updated');
+  const sharedLines = {
+    header: buildHeaderLinesFromBasics(options.resumeData?.basics),
+    summary: buildSummaryLines(options.resumeData?.summary),
+    skills: buildSkillsLines(options.resumeData?.skills),
+    education: buildEducationLines(options.resumeData?.education),
+    awards: buildAwardsLines(options.resumeData?.awards),
+    languages: buildLanguagesLines(options.resumeData?.languages),
+  };
+  const canonicalOriginalByKind: Record<CanonicalSectionKind, string[]> = {
+    ...sharedLines,
+    work: buildWorkLines(options.resumeData?.work, 'original'),
+    projects: buildProjectLines(options.resumeData?.projects, 'original'),
+  };
+  const canonicalUpdatedByKind: Record<CanonicalSectionKind, string[]> = {
+    ...sharedLines,
+    work: buildWorkLines(options.resumeData?.work, 'updated'),
+    projects: buildProjectLines(options.resumeData?.projects, 'updated'),
+  };
 
   if (!parsedSections.length) {
     const rows = CANONICAL_SECTION_ORDER.map(kind =>
@@ -666,50 +606,36 @@ export function buildSectionViewModel(options: {
         id: `canonical-${kind}`,
         title: CANONICAL_SECTION_TITLES[kind],
         kind,
-        originalLines: fallbackOriginalByKind[kind],
-        updatedLines: fallbackUpdatedByKind[kind],
+        originalLines: canonicalOriginalByKind[kind],
+        updatedLines: canonicalUpdatedByKind[kind],
         isCustom: false,
       })
     );
     return orderSectionRowsForUserPreference(rows, options.resumeData?.sectionOrder);
   }
 
-  const updatedBySection = parseTextByParsedSections(updatedText, parsedSections);
   const canonicalRows = CANONICAL_SECTION_ORDER.map(kind => {
     const matching = parsedSections.filter(section => toRowKind(section) === kind);
-    const parsedOriginalLines = combineLineGroups(matching.map(section => section.lines));
-    const parsedUpdatedLines = combineLineGroups(
-      matching.map(section => updatedBySection.get(section.key) || [])
-    );
-    const preferParsedLines = kind === 'header' || kind === 'summary';
-    const canonicalOriginalLines = fallbackOriginalByKind[kind];
-    const canonicalUpdatedLines = fallbackUpdatedByKind[kind];
-    let originalLines = preferParsedLines
-      ? (parsedOriginalLines.length ? parsedOriginalLines : canonicalOriginalLines)
-      : (canonicalOriginalLines.length ? canonicalOriginalLines : parsedOriginalLines);
-    let updatedLines = preferParsedLines
-      ? (parsedUpdatedLines.length ? parsedUpdatedLines : canonicalUpdatedLines)
-      : (
-          canonicalUpdatedLines.length
-            ? canonicalUpdatedLines
-            : hasCanonicalResumeData
-              ? parsedOriginalLines
-              : parsedUpdatedLines
-        );
+    const parsedLines = combineLineGroups(matching.map(section => section.lines));
+    const canonicalOriginalLines = canonicalOriginalByKind[kind];
+    const canonicalUpdatedLines = canonicalUpdatedByKind[kind];
+
+    // For header: prefer parsed lines if they're short and don't contain section headings.
+    // For other sections: prefer canonical lines (from structured resumeData) since they
+    // reflect inline edits and bullet changes applied by the reducer.
+    let originalLines: string[];
+    let updatedLines: string[];
 
     if (kind === 'header') {
-      originalLines = shouldUseParsedHeaderLines(parsedOriginalLines, canonicalOriginalLines)
-        ? parsedOriginalLines
-        : canonicalOriginalLines;
-      updatedLines = shouldUseParsedHeaderLines(parsedUpdatedLines, canonicalUpdatedLines)
-        ? parsedUpdatedLines
-        : canonicalUpdatedLines;
-    }
-
-    if (kind === 'summary') {
-      // Summary inline edits write to canonical resumeData.summary.
-      // Prefer canonical updated lines so the in-app preview matches export payloads.
-      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedUpdatedLines;
+      const useParsed = shouldUseParsedHeaderLines(parsedLines, canonicalOriginalLines);
+      originalLines = useParsed ? parsedLines : canonicalOriginalLines;
+      updatedLines = useParsed ? parsedLines : canonicalUpdatedLines;
+    } else if (kind === 'summary') {
+      originalLines = parsedLines.length ? parsedLines : canonicalOriginalLines;
+      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedLines;
+    } else {
+      originalLines = canonicalOriginalLines.length ? canonicalOriginalLines : parsedLines;
+      updatedLines = canonicalUpdatedLines.length ? canonicalUpdatedLines : parsedLines;
     }
 
     const title = matching[0]?.title || CANONICAL_SECTION_TITLES[kind];
@@ -734,8 +660,6 @@ export function buildSectionViewModel(options: {
         title: section.title,
         kind: 'custom',
         originalLines: section.lines,
-        // Custom sections currently do not participate in structured bullet edits.
-        // Prefer parsed section lines to avoid raw-text re-segmentation drift on multi-column resumes.
         updatedLines: section.lines,
         isCustom: true,
       })
@@ -761,13 +685,7 @@ export function buildCanonicalExportPayload(
     ...(Array.isArray(parsedPayload.sections) ? parsedPayload.sections : []),
     ...(Array.isArray(parsedPayload.customSections) ? parsedPayload.customSections : []),
   ]);
-  const seenMergedSections = new Set<string>();
-  const mergedSections = parsedSections.filter(section => {
-    const dedupeKey = `${section.id}::${section.kind}::${section.title}`;
-    if (seenMergedSections.has(dedupeKey)) return false;
-    seenMergedSections.add(dedupeKey);
-    return true;
-  });
+  const mergedSections = dedupeSections(parsedSections);
 
   const canonicalSectionIndex = new Map<CanonicalSectionKind, number>();
   const sections: ResumeExportSection[] = [];

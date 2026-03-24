@@ -265,6 +265,7 @@ export interface AnalysisSnapshotV1 {
   status: 'completed' | 'processing' | 'failed';
   keywordGaps: KeywordGap[];
   bulletChanges: BulletChange[];
+  skillCategoryRenames: Array<{ from: string; to: string }>;
   rewriteSuggestions: RewriteSuggestion[];
   atsChecks: ATSCheck[];
   riskFlags: RiskFlag[];

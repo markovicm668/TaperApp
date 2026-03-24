@@ -13,20 +13,14 @@ import {
   type SectionViewModelRow,
   snapshotToAnalysisResult,
 } from './mappers';
-import {
-  materializeEffectiveResumeText,
-  applyBulletChangesToResumeData,
-  materializeEffectiveSections,
-} from './effective';
+import { materializeEffectiveSections } from './effective';
+import { dedupeSections } from './normalize';
 import { type ResumeStoreState, useResumeSelector } from './store';
 
 export const selectWorkspace = (state: ResumeStoreState): ResumeWorkspaceV2 => state.workspace;
 
 export const selectResumeData = (state: ResumeStoreState): ResumeDataV2 =>
   state.workspace.resumeData;
-
-export const selectResumeText = (state: ResumeStoreState): string =>
-  state.workspace.source.rawText || '';
 
 export const selectBulletChanges = (state: ResumeStoreState) => state.workspace.analysis.bulletChanges;
 
@@ -58,20 +52,10 @@ export const selectCanonicalParsePayload = (
   };
 };
 
-// Compatibility alias.
-export const selectParsedPayload = selectCanonicalParsePayload;
-
 export const selectCanonicalExportPayload = (state: ResumeStoreState): ResumePdfPayload | null =>
   buildCanonicalExportPayload(selectCanonicalParsePayload(state), {
-    resumeDataOverride: applyBulletChangesToResumeData(
-      selectResumeData(state),
-      selectBulletChanges(state),
-      'user'
-    ),
+    resumeDataOverride: selectResumeData(state),
   });
-
-// Compatibility alias.
-export const selectExportPayload = selectCanonicalExportPayload;
 
 export const selectHasResults = (state: ResumeStoreState): boolean => {
   const resultId = selectCurrentResultId(state);
@@ -94,37 +78,10 @@ export const selectParsedResumeSections = (
 
   if (!merged.length) return null;
 
-  const seen = new Set<string>();
-  const deduped = merged.filter(section => {
-    const id = `${section.id}::${section.kind}::${section.title}`;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
+  const deduped = dedupeSections(merged);
 
   return deduped.length ? deduped : null;
 };
-
-export const selectEffectiveResumeText = (state: ResumeStoreState): string =>
-  materializeEffectiveResumeText(selectResumeText(state), selectBulletChanges(state));
-
-// Compatibility selector alias. Canonical resume data is already current in store.
-export const selectEffectiveResumeData = (state: ResumeStoreState): ResumeDataV2 =>
-  selectResumeData(state);
-
-export const selectEffectiveSectionViewModel = (
-  state: ResumeStoreState
-): SectionViewModelRow[] =>
-  materializeEffectiveSections(
-    selectResumeText(state),
-    selectBulletChanges(state),
-    selectParsedResumeSections(state),
-    applyBulletChangesToResumeData(
-      selectResumeData(state),
-      selectBulletChanges(state),
-      'user'
-    )
-  );
 
 export function useResumeWorkspace(): ResumeWorkspaceV2 {
   return useResumeSelector(selectWorkspace);
@@ -132,10 +89,6 @@ export function useResumeWorkspace(): ResumeWorkspaceV2 {
 
 export function useResumeData(): ResumeDataV2 {
   return useResumeSelector(selectResumeData);
-}
-
-export function useResumeText(): string {
-  return useResumeSelector(selectResumeText);
 }
 
 export function useBulletChanges() {
@@ -158,36 +111,12 @@ export function useCanonicalParsePayload(): AiParsedResumePayloadV2 | null {
   return useResumeSelector(selectCanonicalParsePayload);
 }
 
-// Compatibility hook alias.
-export function useParsedPayload(): AiParsedResumePayloadV2 | null {
-  return useCanonicalParsePayload();
-}
-
 export function useLastAnalysisResult(): AnalysisResult | null {
   const snapshot = useLastAnalysisSnapshot();
   return useMemo(() => {
     if (!snapshot) return null;
     return snapshotToAnalysisResult(snapshot);
   }, [snapshot]);
-}
-
-export function useEffectiveResumeData(): ResumeDataV2 {
-  return useResumeData();
-}
-
-export function useEffectiveResumeText(): string {
-  const resumeText = useResumeText();
-  const bulletChanges = useBulletChanges();
-
-  return useMemo(
-    () => materializeEffectiveResumeText(resumeText, bulletChanges),
-    [resumeText, bulletChanges]
-  );
-}
-
-// Compatibility hook alias.
-export function usePatchedResumeText(): string {
-  return useEffectiveResumeText();
 }
 
 export function useIsResumeHydrated(): boolean {
@@ -199,20 +128,13 @@ export function useParsedResumeSections(): ResumeSectionBlockV2[] | null {
 }
 
 export function useEffectiveSectionViewModel(): SectionViewModelRow[] {
-  const resumeText = useResumeText();
-  const bulletChanges = useBulletChanges();
   const parsedSections = useParsedResumeSections();
   const resumeData = useResumeData();
 
   return useMemo(
-    () => materializeEffectiveSections(resumeText, bulletChanges, parsedSections, resumeData),
-    [resumeText, bulletChanges, parsedSections, resumeData]
+    () => materializeEffectiveSections(parsedSections, resumeData),
+    [parsedSections, resumeData]
   );
-}
-
-// Compatibility hook alias.
-export function useSectionViewModel(): SectionViewModelRow[] {
-  return useEffectiveSectionViewModel();
 }
 
 export function useExportPayload(): ResumePdfPayload | null {

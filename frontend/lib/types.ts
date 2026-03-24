@@ -1,5 +1,4 @@
 import type {
-  AnalysisSnapshotV1,
   ResumeDataV2,
   ResumeWorkspaceV2,
 } from '@resume-scanner/resume-contract';
@@ -80,6 +79,7 @@ export interface AnalysisResult {
   status: 'completed' | 'processing' | 'failed';
   keywordGaps: KeywordGap[];
   bulletChanges: BulletChange[];
+  skillCategoryRenames: Array<{ from: string; to: string }>;
   rewriteSuggestions: RewriteSuggestion[];
   atsChecks: ATSCheck[];
   riskFlags: RiskFlag[];
@@ -137,4 +137,3 @@ export interface ResumePdfPayload extends ResumeDataV2 {
 
 export type CanonicalResumeData = ResumeDataV2;
 export type CanonicalResumeWorkspace = ResumeWorkspaceV2;
-export type CanonicalAnalysisSnapshot = AnalysisSnapshotV1;

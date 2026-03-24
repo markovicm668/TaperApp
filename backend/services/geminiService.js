@@ -4,21 +4,162 @@ const { getEnv } = require("../config/env");
 const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-async function analyzeResume({ resumeText, jobDescription }) {
+function serializeParsedResume(resumeData) {
+  const lines = [];
+  const { basics, summary, work, projects, skills, education, awards, languages } = resumeData || {};
+
+  // Header
+  if (basics) {
+    const nameLine = [basics.name].filter(Boolean).join("");
+    if (nameLine) lines.push(nameLine);
+
+    const contactParts = [
+      basics.title || basics.label,
+      basics.email,
+      basics.phone,
+      basics.location
+        ? [basics.location.city, basics.location.region, basics.location.country].filter(Boolean).join(", ")
+        : null,
+    ].filter(Boolean);
+    if (contactParts.length) lines.push(contactParts.join(" | "));
+
+    (basics.profiles || []).forEach((p) => {
+      const label = p.network || p.username;
+      const entry = label && p.url ? `${label}: ${p.url}` : p.url || label;
+      if (entry) lines.push(entry);
+    });
+  }
+
+  // Summary
+  if (summary) {
+    lines.push("");
+    lines.push("SUMMARY");
+    lines.push(summary);
+  }
+
+  // Experience
+  const workEntries = Array.isArray(work) ? work.filter(Boolean) : [];
+  if (workEntries.length) {
+    lines.push("");
+    lines.push("EXPERIENCE");
+    workEntries.forEach((entry) => {
+      const dateParts = [entry.startDate, entry.endDate || (entry.isCurrent ? "Present" : null)]
+        .filter(Boolean)
+        .join(" – ");
+      const locationStr = entry.location
+        ? [entry.location.city, entry.location.country].filter(Boolean).join(", ")
+        : null;
+      const heading = [
+        entry.position && entry.company
+          ? `${entry.position} at ${entry.company}`
+          : entry.position || entry.company,
+        dateParts,
+        locationStr,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      lines.push(heading);
+      (entry.highlights || []).forEach((h) => {
+        if (h.text) lines.push(`- ${h.text}`);
+      });
+    });
+  }
+
+  // Projects
+  const projectEntries = Array.isArray(projects) ? projects.filter(Boolean) : [];
+  if (projectEntries.length) {
+    lines.push("");
+    lines.push("PROJECTS");
+    projectEntries.forEach((entry) => {
+      const dateParts = [entry.startDate, entry.endDate].filter(Boolean).join(" – ");
+      const heading = [entry.name, dateParts].filter(Boolean).join(" | ");
+      lines.push(heading);
+      if (entry.role) lines.push(`Role: ${entry.role}`);
+      const techs = (entry.technologies || []).map((t) => t.name).filter(Boolean).join(", ");
+      if (techs) lines.push(`Technologies: ${techs}`);
+      if (entry.description) lines.push(`Description: ${entry.description}`);
+      (entry.highlights || []).forEach((h) => {
+        if (h.text) lines.push(`- ${h.text}`);
+      });
+    });
+  }
+
+  // Skills
+  const skillEntries = Array.isArray(skills) ? skills.filter(Boolean) : [];
+  if (skillEntries.length) {
+    lines.push("");
+    lines.push("SKILLS");
+    const byCategory = {};
+    skillEntries.forEach((s) => {
+      const cat = s.category || "Other";
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(s.name);
+    });
+    Object.entries(byCategory).forEach(([cat, names]) => {
+      lines.push(`${cat}: ${names.join(", ")}`);
+    });
+  }
+
+  // Education
+  const educationEntries = Array.isArray(education) ? education.filter(Boolean) : [];
+  if (educationEntries.length) {
+    lines.push("");
+    lines.push("EDUCATION");
+    educationEntries.forEach((entry) => {
+      const degree = [entry.degree, entry.area].filter(Boolean).join(" ");
+      const dateParts = [entry.startDate, entry.endDate].filter(Boolean).join(" – ");
+      const entryLine = [entry.institution, degree, dateParts].filter(Boolean).join(" | ");
+      if (entryLine) lines.push(entryLine);
+      if (entry.gpa) lines.push(`GPA: ${entry.gpa}`);
+      (entry.honors || []).forEach((h) => h && lines.push(`- ${h}`));
+    });
+  }
+
+  // Awards
+  const awardEntries = Array.isArray(awards) ? awards.filter(Boolean) : [];
+  if (awardEntries.length) {
+    lines.push("");
+    lines.push("AWARDS");
+    awardEntries.forEach((entry) => {
+      const heading = [entry.title, entry.issuer, entry.date].filter(Boolean).join(" – ");
+      if (heading) lines.push(heading);
+      if (entry.summary) lines.push(`  ${entry.summary}`);
+    });
+  }
+
+  // Languages
+  const languageEntries = Array.isArray(languages) ? languages.filter(Boolean) : [];
+  if (languageEntries.length) {
+    lines.push("");
+    lines.push("LANGUAGES");
+    lines.push(
+      languageEntries
+        .map((l) => (l.fluency ? `${l.language} (${l.fluency})` : l.language))
+        .filter(Boolean)
+        .join(", ")
+    );
+  }
+
+  return lines.join("\n");
+}
+
+async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3-flash-preview",
   });
 
-  console.log("-> Gemini API call initiated with model: gemini-3-pro-preview");
+  const resumeForPrompt = parsedResumeData
+    ? serializeParsedResume(parsedResumeData)
+    : resumeText;
 
   const prompt = `
-You are an ATS resume bullet optimizer. Your sole focus is improving EXPERIENCE section bullets.
+You are an ATS resume optimizer. You improve EXPERIENCE section bullets AND the SKILLS section.
 
 JOB DESCRIPTION:
 ${jobDescription}
 
 RESUME:
-${resumeText}
+${resumeForPrompt}
 
 Return STRICT JSON ONLY with this schema:
 {
@@ -27,18 +168,18 @@ Return STRICT JSON ONLY with this schema:
   "targetRole": string,
   "company": string,
   "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
-  "missingKeywords": string[],
-  "matchedKeywords": string[],
   "rewrittenBullets": [
     {
-      "section": "experience" | "projects" | "skills" | "summary" (optional),
+      "section": "experience" | "projects" | "skills",
+      "type": "modified" | "added" | "removed",
       "original": string,
       "improved": string,
       "rationale": string
     }
   ],
-  "atsWarnings": string[],
-  "suggestions": string[]
+  "skillCategoryRenames": [
+    { "from": "exact current category name", "to": "new category name" }
+  ]
 }
 
 Rules:
@@ -47,21 +188,22 @@ Rules:
 - No commentary outside JSON
 - Ensure matchScore is an integer
 - Infer targetRole and company from the JOB DESCRIPTION (or use empty string if unknown)
-- Focus exclusively on EXPERIENCE section bullets in the RESUME, but offer suggestions for other sections if relevant
+- "section" must be one of: experience, projects, skills
+
+EXPERIENCE bullets (section: "experience" or "projects"):
 - For each bullet, provide one improved version that is action-led and aligned to the JOB DESCRIPTION
 - Do not invent new bullets
-- "section" is optional, but when provided it must be one of: experience, projects, skills, summary
 - "original" must be verbatim from the resume bullet text
 - "improved" should be one bullet line, action-led, and aligned to the JD
-- Keep missingKeywords, matchedKeywords, atsWarnings, suggestions empty if not obvious
-`;
+- type must be "modified"
 
-  console.log("-> Gemini rewrite prompt payload:", prompt);
+SKILLS (section: "skills"):
+- Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume (type: "added", original: "", improved: "[CategoryName] skill name" — prefix with the target category in square brackets). IMPORTANT: the CategoryName MUST be one of the exact category names already present in the resume (e.g. if the resume has "Soft", use "[Soft]" not "[Soft Skills]"). Only create a new category name if no existing category is a reasonable fit.
+- Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")`;
 
   console.log("-> Gemini rewrite input data:", {
-    resumeText,
-    jobDescription,
-    resumeTextLength: resumeText?.length ?? 0,
+    usingParsedResume: Boolean(parsedResumeData),
+    resumeForPromptLength: resumeForPrompt?.length ?? 0,
     jobDescriptionLength: jobDescription?.length ?? 0,
   });
 
@@ -80,4 +222,4 @@ Rules:
   }
 }
 
-module.exports = { analyzeResume };
+module.exports = { analyzeResume, serializeParsedResume };

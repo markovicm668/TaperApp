@@ -4,9 +4,9 @@ import type {
   ResumeHighlightV2,
   ResumeProjectItemV2,
   ResumeSectionBlockV2,
+  ResumeSkillItemV2,
   ResumeWorkItemV2,
 } from '@resume-scanner/resume-contract';
-import { applyBulletChangesToText } from '../text-patcher';
 import { buildSectionViewModel, type SectionViewModelRow } from './mappers';
 
 const LIST_PREFIX_RE = /^\s*(?:[-*•●▪◦–—−]|(?:\(?\d{1,3}[.)]))\s+/u;
@@ -276,24 +276,13 @@ function hasProjectContent(entry: ResumeProjectItemV2): boolean {
   );
 }
 
-function applyChangesToWork(
-  workEntries: ResumeWorkItemV2[],
+function applyHighlightChangesToEntries<T extends { id: string; highlights?: ResumeHighlightV2[] }>(
+  entries: T[],
   changes: NormalizedBulletChange[],
-  origin: ChangeOrigin
-): { work: ResumeWorkItemV2[]; usedChanges: Set<number> } {
-  if (!changes.length) {
-    return { work: Array.isArray(workEntries) ? workEntries : [], usedChanges: new Set<number>() };
-  }
-
+  origin: ChangeOrigin,
+  prefix: string,
+): { entries: T[]; usedChanges: Set<number> } {
   const usedChanges = new Set<number>();
-  const entries = (Array.isArray(workEntries) ? workEntries : []).map((entry, index) => {
-    const entryId = entry.id || `work-${index + 1}`;
-    return {
-      ...entry,
-      id: entryId,
-      highlights: normalizeHighlights(entry.highlights, entryId),
-    };
-  });
 
   entries.forEach(entry => {
     entry.highlights = applyChangesToHighlights(entry.highlights || [], changes, usedChanges, origin);
@@ -301,14 +290,14 @@ function applyChangesToWork(
 
   const additions = getAddedHighlights(changes, usedChanges);
   if (additions.length) {
-    const targetEntry = entries.length > 0 ? entries[entries.length - 1] : { id: 'work-1', highlights: [] };
-    if (entries.length === 0) entries.push(targetEntry as ResumeWorkItemV2);
-    const targetId = targetEntry.id || `work-${entries.length}`;
+    const targetEntry = entries.length > 0 ? entries[entries.length - 1] : { id: `${prefix}-1`, highlights: [] } as unknown as T;
+    if (entries.length === 0) entries.push(targetEntry);
+    const targetId = targetEntry.id || `${prefix}-${entries.length}`;
 
     const existingAdded = new Set(
       (targetEntry.highlights || [])
-        .filter(highlight => normalizeBulletForStorage(highlight.originalText || '') === '')
-        .map(highlight => normalizeBulletForStorage(highlight.text || ''))
+        .filter(h => normalizeBulletForStorage(h.originalText || '') === '')
+        .map(h => normalizeBulletForStorage(h.text || ''))
     );
 
     targetEntry.highlights = [
@@ -338,14 +327,27 @@ function applyChangesToWork(
     ];
   }
 
+  return { entries, usedChanges };
+}
+
+function applyChangesToWork(
+  workEntries: ResumeWorkItemV2[],
+  changes: NormalizedBulletChange[],
+  origin: ChangeOrigin
+): { work: ResumeWorkItemV2[]; usedChanges: Set<number> } {
+  if (!changes.length) {
+    return { work: Array.isArray(workEntries) ? workEntries : [], usedChanges: new Set<number>() };
+  }
+
+  const entries = (Array.isArray(workEntries) ? workEntries : []).map((entry, index) => {
+    const entryId = entry.id || `work-${index + 1}`;
+    return { ...entry, id: entryId, highlights: normalizeHighlights(entry.highlights, entryId) };
+  });
+
+  const { usedChanges } = applyHighlightChangesToEntries(entries, changes, origin, 'work');
+
   const cleaned = entries
-    .map(entry => {
-      const entryId = entry.id || 'work';
-      return {
-        ...entry,
-        highlights: normalizeHighlights(entry.highlights, entryId),
-      };
-    })
+    .map(entry => ({ ...entry, highlights: normalizeHighlights(entry.highlights, entry.id || 'work') }))
     .filter(hasWorkContent);
 
   return { work: cleaned, usedChanges };
@@ -357,13 +359,9 @@ function applyChangesToProjects(
   origin: ChangeOrigin
 ): { projects: ResumeProjectItemV2[]; usedChanges: Set<number> } {
   if (!changes.length) {
-    return {
-      projects: Array.isArray(projectEntries) ? projectEntries : [],
-      usedChanges: new Set<number>(),
-    };
+    return { projects: Array.isArray(projectEntries) ? projectEntries : [], usedChanges: new Set<number>() };
   }
 
-  const usedChanges = new Set<number>();
   const entries = (Array.isArray(projectEntries) ? projectEntries : []).map((entry, index) => {
     const entryId = entry.id || `project-${index + 1}`;
     return {
@@ -374,76 +372,186 @@ function applyChangesToProjects(
     };
   });
 
-  entries.forEach(entry => {
-    entry.highlights = applyChangesToHighlights(entry.highlights || [], changes, usedChanges, origin);
-  });
-
-  const additions = getAddedHighlights(changes, usedChanges);
-  if (additions.length) {
-    const targetEntry =
-      entries.length > 0 ? entries[entries.length - 1] : { id: 'project-1', technologies: [], highlights: [] };
-    if (entries.length === 0) entries.push(targetEntry as ResumeProjectItemV2);
-    const targetId = targetEntry.id || `project-${entries.length}`;
-
-    const existingAdded = new Set(
-      (targetEntry.highlights || [])
-        .filter(highlight => normalizeBulletForStorage(highlight.originalText || '') === '')
-        .map(highlight => normalizeBulletForStorage(highlight.text || ''))
-    );
-
-    targetEntry.highlights = [
-      ...(targetEntry.highlights || []),
-      ...additions
-        .filter(addition => {
-          const text = normalizeBulletForStorage(addition.text);
-          if (!text || existingAdded.has(text)) {
-            usedChanges.add(addition.changeIndex);
-            return false;
-          }
-          existingAdded.add(text);
-          return true;
-        })
-        .map((addition, index) => {
-          usedChanges.add(addition.changeIndex);
-          return {
-            id: `${targetId}-added-highlight-${index + 1}`,
-            text: addition.text,
-            originalText: '',
-            source: origin,
-            locked: false,
-            aiTags: [],
-            keywordMatches: [],
-          } as ResumeHighlightV2;
-        }),
-    ];
-  }
+  const { usedChanges } = applyHighlightChangesToEntries(entries, changes, origin, 'project');
 
   const cleaned = entries
-    .map(entry => {
-      const entryId = entry.id || 'project';
-      return {
-        ...entry,
-        technologies: Array.isArray(entry.technologies) ? entry.technologies : [],
-        highlights: normalizeHighlights(entry.highlights, entryId),
-      };
-    })
+    .map(entry => ({
+      ...entry,
+      technologies: Array.isArray(entry.technologies) ? entry.technologies : [],
+      highlights: normalizeHighlights(entry.highlights, entry.id || 'project'),
+    }))
     .filter(hasProjectContent);
 
   return { projects: cleaned, usedChanges };
 }
 
+/** Parse "[Category] SkillName" bracket prefix from AI-added skills. */
+function parseSkillCategoryPrefix(text: string): { category: string; name: string } | null {
+  const match = text.match(/^\[([^\]]+)\]\s+(.+)$/);
+  if (!match) return null;
+  return { category: match[1].trim(), name: match[2].trim() };
+}
+
+function applyChangesToSkills(
+  skillEntries: ResumeSkillItemV2[],
+  changes: NormalizedBulletChange[],
+  origin: ChangeOrigin,
+  categoryRenames?: Array<{ from: string; to: string }>,
+): { skills: ResumeSkillItemV2[]; usedChanges: Set<number> } {
+  if (!changes.length && !categoryRenames?.length) {
+    return { skills: Array.isArray(skillEntries) ? skillEntries : [], usedChanges: new Set<number>() };
+  }
+
+  const usedChanges = new Set<number>();
+  const entries = (Array.isArray(skillEntries) ? skillEntries : []).slice();
+
+  // Apply category renames first
+  if (categoryRenames?.length) {
+    for (const rename of categoryRenames) {
+      const fromNorm = rename.from.trim().toLowerCase();
+      for (const skill of entries) {
+        if ((skill.category || '').trim().toLowerCase() === fromNorm) {
+          skill.category = rename.to;
+        }
+      }
+    }
+  }
+
+  // Apply modifications and removals
+  const result: ResumeSkillItemV2[] = [];
+  for (const skill of entries) {
+    const skillName = String(skill.name || '').trim();
+    if (!skillName) continue;
+
+    const originalName = String(skill.originalName || skill.name || '').trim();
+    const normalizedName = normalizeBulletForMatch(skillName);
+    const normalizedNameLoose = normalizeBulletLooseKey(skillName);
+
+    const matchedChange = changes.find(change => {
+      if (usedChanges.has(change.index)) return false;
+      if (change.type === 'added') return false;
+      return bulletMatchesChange(normalizedName, normalizedNameLoose, change);
+    });
+
+    if (!matchedChange) {
+      result.push({
+        ...skill,
+        originalName: originalName || skillName,
+        source: skill.source || 'user',
+      });
+      continue;
+    }
+
+    usedChanges.add(matchedChange.index);
+
+    if (matchedChange.type === 'removed') {
+      result.push({
+        ...skill,
+        name: originalName,
+        originalName: originalName || skillName,
+        source: 'removed',
+      });
+      continue;
+    }
+
+    // modified: rename the skill, preserve original
+    const improvedName = normalizeBulletForStorage(matchedChange.improved);
+    const newName = improvedName || skillName;
+    result.push({
+      ...skill,
+      name: newName,
+      originalName: originalName || skillName,
+      source: newName === originalName ? (skill.source || 'user') : origin,
+    });
+  }
+
+  // Apply additions
+  const additions = changes.filter(
+    change => !usedChanges.has(change.index) && change.type === 'added'
+  );
+
+  const existingNames = new Set(
+    result.map(s => normalizeBulletForMatch(String(s.name || '')))
+  );
+
+  // Collect existing categories for fuzzy matching
+  const existingCategories = [
+    ...new Set(result.map(s => (s.category || '').trim()).filter(Boolean)),
+  ];
+  const defaultCategory = existingCategories[0] || 'General';
+
+  /** Match an AI-provided category to an existing one (case-insensitive substring). */
+  function resolveCategory(requested: string): string {
+    const reqLower = requested.trim().toLowerCase();
+    // Exact match (case-insensitive)
+    const exact = existingCategories.find(c => c.toLowerCase() === reqLower);
+    if (exact) return exact;
+    // One contains the other (e.g. "Soft" ↔ "Soft Skills")
+    const fuzzy = existingCategories.find(
+      c => c.toLowerCase().includes(reqLower) || reqLower.includes(c.toLowerCase()),
+    );
+    if (fuzzy) return fuzzy;
+    // No match — use as-is (new category)
+    return requested.trim();
+  }
+
+  for (const addition of additions) {
+    const raw = normalizeBulletForStorage(addition.improved || addition.original);
+    if (!raw) {
+      usedChanges.add(addition.index);
+      continue;
+    }
+
+    // Parse "[Category] SkillName" bracket prefix if present
+    const parsed = parseSkillCategoryPrefix(raw);
+    const name = parsed ? parsed.name : raw;
+    const category = parsed ? resolveCategory(parsed.category) : defaultCategory;
+
+    const normalizedName = normalizeBulletForMatch(name);
+    if (existingNames.has(normalizedName)) {
+      usedChanges.add(addition.index);
+      continue;
+    }
+    existingNames.add(normalizedName);
+    usedChanges.add(addition.index);
+    const newSkill: ResumeSkillItemV2 = {
+      id: `skill-added-${addition.index}`,
+      name,
+      originalName: '',
+      category,
+      source: origin,
+    };
+    // Insert after the last skill with the same category to avoid duplicate category headers
+    const categoryNorm = category.trim().toLowerCase();
+    const lastPeerIndex = result.reduce(
+      (last, s, idx) => ((s.category || '').trim().toLowerCase() === categoryNorm ? idx : last),
+      -1,
+    );
+    if (lastPeerIndex >= 0) {
+      result.splice(lastPeerIndex + 1, 0, newSkill);
+    } else {
+      result.push(newSkill);
+    }
+  }
+
+  return { skills: result, usedChanges };
+}
+
 export function applyBulletChangesToResumeData(
   baseResumeData: ResumeDataV2,
   bulletChanges: BulletChange[],
-  origin: ChangeOrigin
+  origin: ChangeOrigin,
+  skillCategoryRenames?: Array<{ from: string; to: string }>,
 ): ResumeDataV2 {
-  if (!Array.isArray(bulletChanges) || bulletChanges.length === 0) {
+  if ((!Array.isArray(bulletChanges) || bulletChanges.length === 0) && !skillCategoryRenames?.length) {
     return baseResumeData;
   }
 
   const normalizedChanges = normalizeBulletChanges(bulletChanges);
   const workScopedChanges = normalizedChanges.filter(change => change.section === 'work');
   const projectScopedChanges = normalizedChanges.filter(change => change.section === 'projects');
+  const skillsScopedChanges = normalizedChanges.filter(change => change.section === 'skills');
+  const summaryScopedChanges = normalizedChanges.filter(change => change.section === 'summary');
   const unscopedChanges = normalizedChanges.filter(change => change.section === undefined);
 
   const workResult = applyChangesToWork(
@@ -462,30 +570,36 @@ export function applyBulletChangesToResumeData(
     origin
   );
 
+  const skillsResult = applyChangesToSkills(
+    Array.isArray(baseResumeData.skills) ? baseResumeData.skills : [],
+    skillsScopedChanges,
+    origin,
+    skillCategoryRenames,
+  );
+
+  let nextSummary = baseResumeData.summary;
+  if (summaryScopedChanges.length) {
+    const summaryChange = summaryScopedChanges.find(c => c.type === 'modified');
+    if (summaryChange) {
+      const improved = normalizeBulletForStorage(summaryChange.improved);
+      if (improved) nextSummary = improved;
+    }
+  }
+
   return {
     ...baseResumeData,
+    summary: nextSummary,
     work: workResult.work,
     projects: projectResult.projects,
+    skills: skillsResult.skills,
   };
 }
 
-export function materializeEffectiveResumeText(
-  rawText: string,
-  bulletChanges: BulletChange[]
-): string {
-  if (!rawText.trim()) return '';
-  return applyBulletChangesToText(rawText, bulletChanges).updatedText;
-}
-
 export function materializeEffectiveSections(
-  rawText: string,
-  bulletChanges: BulletChange[],
   parsedSections?: ResumeSectionBlockV2[] | null,
   resumeData?: ResumeDataV2
 ): SectionViewModelRow[] {
   return buildSectionViewModel({
-    originalText: rawText || '',
-    updatedText: materializeEffectiveResumeText(rawText || '', bulletChanges),
     parsedSections,
     resumeData,
   });

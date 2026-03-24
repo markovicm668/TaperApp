@@ -118,7 +118,9 @@ export interface ResumeLanguageItemV2 {
 export interface ResumeSkillItemV2 {
   id?: string;
   name: string;
+  originalName?: string;
   category?: string;
+  source?: string;
 }
 
 export interface ResumeCustomSectionItemV2 {
@@ -265,6 +267,7 @@ export interface AnalysisSnapshotV1 {
   status: 'completed' | 'processing' | 'failed';
   keywordGaps: KeywordGap[];
   bulletChanges: BulletChange[];
+  skillCategoryRenames: Array<{ from: string; to: string }>;
   rewriteSuggestions: RewriteSuggestion[];
   atsChecks: ATSCheck[];
   riskFlags: RiskFlag[];

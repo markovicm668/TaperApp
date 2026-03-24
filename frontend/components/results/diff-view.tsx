@@ -29,15 +29,13 @@ import {
   type ResumeInlineEditTarget,
 } from '@/lib/resume/inline-edits';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 interface DiffViewProps {
-  originalText: string;
+  hasOriginal: boolean;
   changes: BulletChange[];
-  sections: SectionViewModelRow[];
   onChangesUpdate?: (changes: BulletChange[]) => void;
   onInlineEdit?: (target: ResumeInlineEditTarget, text: string) => void;
   pdfSelectionModel?: PdfSelectionModel | null;
@@ -192,13 +190,6 @@ function toSectionKeyFromLabel(value: string | undefined): string {
   return `custom:${normalized}`;
 }
 
-function sectionKeyForRow(section: SectionViewModelRow): string {
-  if (section.kind === 'custom') {
-    return `custom:${normalizeSectionLabel(section.title)}`;
-  }
-  return section.kind;
-}
-
 function isRenderableFinalRow(row: DiffHierarchyContentRow | RenderRow): boolean {
   return row.type !== 'spacer' && row.type !== 'removed';
 }
@@ -316,6 +307,26 @@ function consumeMatchingItemKey(
 
 function consumeSequentialItemKey(queue: string[], row: DiffHierarchyContentRow | RenderRow): string | undefined {
   if (!queue.length || !isRenderableFinalRow(row)) return undefined;
+  return consumeNext(queue);
+}
+
+function consumeSkillItemKey(
+  queue: string[],
+  row: DiffHierarchyContentRow | RenderRow,
+  model: PdfSelectionModel | null | undefined
+): string | undefined {
+  if (!queue.length || row.type === 'spacer') return undefined;
+  if (row.type === 'removed') {
+    if (!model) return undefined;
+    const rowText = normalizeLineForMatch(row.text);
+    if (!rowText) return undefined;
+    const matchIndex = queue.findIndex(key => {
+      const item = model.items[key];
+      return (item?.matchTexts || []).some(mt => isLineMatch(rowText, normalizeLineForMatch(mt)));
+    });
+    if (matchIndex < 0) return undefined;
+    return queue.splice(matchIndex, 1)[0];
+  }
   return consumeNext(queue);
 }
 
@@ -450,7 +461,23 @@ function buildSectionRows(updatedLines: string[], sectionChanges: IndexedChange[
         rows.push({
           id: `add-${match.index}-${lineIndex}`,
           type: 'added',
-          text: match.change.improved || line,
+          text: line,
+          changeIndex: match.index,
+        });
+        return;
+      }
+    }
+
+    const removedMatchIndex = removedQueue.findIndex(item =>
+      isLineMatch(normalizedLine, item.normalizedOriginal)
+    );
+    if (removedMatchIndex >= 0) {
+      const [match] = removedQueue.splice(removedMatchIndex, 1);
+      if (match) {
+        rows.push({
+          id: `rem-${match.index}-${lineIndex}`,
+          type: 'removed',
+          text: match.change.original,
           changeIndex: match.index,
         });
         return;
@@ -492,9 +519,8 @@ function buildSectionRows(updatedLines: string[], sectionChanges: IndexedChange[
 }
 
 export function DiffView({
-  originalText,
+  hasOriginal,
   changes,
-  sections,
   onChangesUpdate,
   onInlineEdit,
   pdfSelectionModel = null,
@@ -511,8 +537,6 @@ export function DiffView({
   useEffect(() => {
     setLocalChanges(changes);
   }, [changes]);
-
-  const hasOriginal = Boolean(originalText.trim());
 
   const sectionModels = useMemo<SectionRenderModel[]>(() => {
     const indexedChanges: IndexedChange[] = localChanges.map((change, index) => ({
@@ -531,22 +555,73 @@ export function DiffView({
     });
 
     const consumedKeys = new Set<string>();
-    const mappedSections = sections
-      .map(section => {
-        const key = sectionKeyForRow(section);
-        consumedKeys.add(key);
-        const sectionChanges = changesBySection.get(key) || [];
-        const rows = buildSectionRows(section.updatedLines, sectionChanges);
-        return {
-          id: section.key,
+    const mappedSections: SectionRenderModel[] = [];
+
+    if (pdfSelectionModel) {
+      pdfSelectionModel.sectionOrder.forEach(sectionId => {
+        const section = pdfSelectionModel.sections[sectionId];
+        if (!section) return;
+
+        const sectionKey =
+          section.kind === 'custom' && section.title
+            ? `custom:${normalizeSectionLabel(section.title)}`
+            : section.kind;
+        consumedKeys.add(sectionKey);
+
+        const sectionChanges = changesBySection.get(sectionKey) || [];
+        const updatedLines: string[] = [];
+        let lastSkillCategory: string | null | undefined = undefined;
+        section.itemKeys.forEach(itemKey => {
+          const item = pdfSelectionModel.items[itemKey];
+          if (!item?.label) return;
+          if (item.parentKey) return;
+
+          if (
+            item.kind === 'work-entry' ||
+            item.kind === 'project-entry' ||
+            item.kind === 'education-entry' ||
+            item.kind === 'award-entry'
+          ) {
+            if (updatedLines.length > 0 && updatedLines[updatedLines.length - 1] !== '') {
+              updatedLines.push('');
+            }
+            updatedLines.push(item.label);
+            item.childKeys.forEach(childKey => {
+              const child = pdfSelectionModel.items[childKey];
+              if (child?.label) updatedLines.push(child.label);
+            });
+            return;
+          }
+
+          if (item.kind === 'skill') {
+            const category = item.category ?? null;
+            if (category !== lastSkillCategory) {
+              if (lastSkillCategory !== undefined && updatedLines.at(-1) !== '') {
+                updatedLines.push('');
+              }
+              if (category) {
+                updatedLines.push(`${category}:`);
+              }
+              lastSkillCategory = category;
+            }
+            updatedLines.push(item.label);
+            return;
+          }
+
+          updatedLines.push(item.label);
+        });
+
+        const rows = buildSectionRows(updatedLines, sectionChanges);
+        mappedSections.push({
+          id: sectionId,
           title: section.title,
           kind: section.kind,
-          changed: section.changed || sectionChanges.length > 0,
+          changed: sectionChanges.length > 0,
           changeCount: sectionChanges.length,
           rows,
-        };
-      })
-      .filter(section => section.rows.length > 0 || section.changeCount > 0);
+        });
+      });
+    }
 
     const unmappedSections: SectionRenderModel[] = [];
     for (const [key, sectionChanges] of changesBySection.entries()) {
@@ -562,7 +637,7 @@ export function DiffView({
     }
 
     return [...mappedSections, ...unmappedSections];
-  }, [sections, localChanges]);
+  }, [localChanges, pdfSelectionModel]);
 
   useEffect(() => {
     if (sectionModels.length === 0) {
@@ -871,43 +946,55 @@ export function DiffView({
 
   const changeLineClass =
     'flex flex-col gap-2 rounded-md border px-3 py-2 font-mono text-[13px] leading-relaxed sm:flex-row sm:items-start sm:gap-3';
-  const changeLeadClass = 'flex items-center gap-2 sm:min-w-[96px] sm:flex-shrink-0';
   const changeBodyClass = 'flex min-w-0 flex-1 items-start gap-2';
-  const changeBadgeClass = 'h-5 rounded-md px-1.5 py-0 text-[10px] font-semibold uppercase tracking-[0.08em]';
-
-  const renderRemovedRow = (row: Extract<DiffHierarchyChangeRow, { type: 'removed' }>) => (
-    <div key={row.id} className="my-1">
-      <div className={cn(changeLineClass, 'border-destructive/20 border-l-4 bg-destructive/[0.05]')}>
-        <div className={changeLeadClass}>
-          <Minus className="h-4 w-4 flex-shrink-0 text-destructive" />
-          <Badge
-            variant="outline"
-            className={cn(changeBadgeClass, 'border-destructive/20 bg-destructive/[0.08] text-destructive/90')}
-          >
-            Removed
-          </Badge>
-        </div>
-        <div className={changeBodyClass}>
-          <span className="min-w-0 flex-1 whitespace-pre-wrap text-destructive/85">{row.text}</span>
+  const renderRemovedRow = (row: Extract<DiffHierarchyChangeRow, { type: 'removed' }>) => {
+    const isEditing = isEditingChange(row.changeIndex);
+    return (
+      <div key={row.id} className="my-1">
+        <div className={cn(changeLineClass, 'border-destructive/20 border-l-4 bg-destructive/[0.05]')}>
+            <Minus className="h-4 w-4 flex-shrink-0 text-destructive" />
+          <div className={changeBodyClass}>
+            {isEditing ? (
+              <div className="min-w-0 flex-1">
+                <Textarea
+                  value={draftText}
+                  onChange={event => setDraftText(event.target.value)}
+                  className="min-h-[96px] bg-background font-mono text-sm"
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" onClick={saveEditing}>
+                    Save
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={cancelEditing}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap text-destructive/85">{row.text}</span>
+                <Button
+                  variant="quiet"
+                  size="icon"
+                  className="h-8 w-8 flex-shrink-0 border border-transparent text-muted-foreground opacity-75 transition hover:border-border/70 hover:opacity-100 focus-visible:opacity-100"
+                  onClick={() => startChangeEditing(row.changeIndex, row.text)}
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAddedRow = (row: Extract<DiffHierarchyChangeRow, { type: 'added' }>) => {
     const isEditing = isEditingChange(row.changeIndex);
     return (
       <div key={row.id} className="my-1">
         <div className={cn(changeLineClass, 'border-success/20 border-l-4 bg-success/[0.05]')}>
-          <div className={changeLeadClass}>
             <Plus className="h-4 w-4 flex-shrink-0 text-success" />
-            <Badge
-              variant="outline"
-              className={cn(changeBadgeClass, 'border-success/20 bg-success/[0.08] text-success/95')}
-            >
-              Added
-            </Badge>
-          </div>
           <div className={changeBodyClass}>
             {isEditing ? (
               <div className="min-w-0 flex-1">
@@ -1119,7 +1206,8 @@ export function DiffView({
 
   const renderHierarchyBlock = (
     block: DiffHierarchyBlock,
-    selectionContext: SectionSelectionContext | null
+    selectionContext: SectionSelectionContext | null,
+    sectionKind?: string
   ) => {
     if (block.type === 'header') {
       const headerItemKeys = selectionContext?.headerItemKeys || [];
@@ -1488,7 +1576,7 @@ export function DiffView({
                   row,
                   'bullet',
                   selectionContext
-                    ? consumeSequentialItemKey(selectionContext.skillItemKeys, row)
+                    ? consumeSkillItemKey(selectionContext.skillItemKeys, row, pdfSelectionModel)
                     : undefined
                 )
               )}
@@ -1520,14 +1608,24 @@ export function DiffView({
 
     if (block.type === 'simple-list') {
       const neutralVariant = block.listStyle === 'bulleted' ? 'bullet' : 'plain';
+      const isSkills = sectionKind === 'skills';
+      const itemKeyQueue = selectionContext
+        ? isSkills
+          ? selectionContext.skillItemKeys
+          : sectionKind === 'languages'
+            ? selectionContext.languageItemKeys
+            : selectionContext.customLineItemKeys
+        : undefined;
       return (
         <div className="space-y-1">
           {block.rows.map(row =>
             renderContentRow(
               row,
               neutralVariant,
-              selectionContext?.languageItemKeys?.length
-                ? consumeSequentialItemKey(selectionContext.languageItemKeys, row)
+              itemKeyQueue?.length
+                ? isSkills
+                  ? consumeSkillItemKey(itemKeyQueue, row, pdfSelectionModel)
+                  : consumeSequentialItemKey(itemKeyQueue, row)
                 : undefined
             )
           )}
@@ -1615,7 +1713,7 @@ export function DiffView({
                           key={`${section.id}-${block.id}`}
                           className={cn('py-4 first:pt-0 last:pb-0', index > 0 && 'border-t border-border/70')}
                         >
-                          {renderHierarchyBlock(block, selectionContext)}
+                          {renderHierarchyBlock(block, selectionContext, section.kind)}
                         </div>
                       ))
                     )}

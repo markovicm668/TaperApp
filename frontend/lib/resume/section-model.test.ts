@@ -384,16 +384,27 @@ test('buildCanonicalExportPayload uses resumeData override for canonical section
 });
 
 test('buildSectionViewModel renders parsed sections and tracks updated lines', () => {
-  const updatedText = `Jane Doe
-jane@example.com
-
-Experience
-- Built and scaled backend APIs`;
-
   const rows = buildSectionViewModel({
-    originalText: SAMPLE_RESUME_TEXT,
-    updatedText,
     parsedSections: SAMPLE_PARSED_SECTIONS,
+    resumeData: {
+      basics: { name: 'Jane Doe', email: 'jane@example.com' },
+      summary: undefined,
+      work: [
+        {
+          company: 'Acme',
+          position: 'Engineer',
+          highlights: [{ text: 'Built and scaled backend APIs', originalText: 'Built backend APIs' }],
+        },
+      ],
+      education: [],
+      projects: [],
+      awards: [],
+      skills: [],
+      languages: [],
+      customSections: [],
+      sectionOrder: [],
+      versions: [],
+    },
   });
 
   const work = rows.find(row => row.key === 'canonical-work');
@@ -409,20 +420,6 @@ Experience
 
 test('buildSectionViewModel respects resumeData sectionOrder and keeps header first', () => {
   const rows = buildSectionViewModel({
-    originalText: `Jane Doe
-Summary
-Product-focused engineer
-Skills
-TypeScript
-Experience
-- Built backend APIs`,
-    updatedText: `Jane Doe
-Summary
-Product-focused engineer
-Skills
-TypeScript
-Experience
-- Built backend APIs`,
     parsedSections: [
       {
         id: 'sec-header',
@@ -484,10 +481,6 @@ Experience
 
 test('buildSectionViewModel uses canonical header fallback when parsed header is missing', () => {
   const rows = buildSectionViewModel({
-    originalText: `Experience
-- Built backend APIs`,
-    updatedText: `Experience
-- Built backend APIs`,
     parsedSections: [
       {
         id: 'section-work',
@@ -529,14 +522,7 @@ test('buildSectionViewModel uses canonical header fallback when parsed header is
 });
 
 test('buildSectionViewModel falls back to canonical header when parsed header contains section-heading spillover', () => {
-  const rawText = `Jane Doe
-Software Engineer
-WORK EXPERIENCE
-Acme Corp`;
-
   const rows = buildSectionViewModel({
-    originalText: rawText,
-    updatedText: rawText,
     parsedSections: [
       {
         id: 'section-header',
@@ -592,13 +578,8 @@ test('buildSectionViewModel keeps parsed header lines when parsed header is shor
     'markovicm668@gmail.com',
     '+381654071575',
   ];
-  const rawText = `${parsedHeaderLines.join('\n')}
-Experience
-Acme Corp`;
 
   const rows = buildSectionViewModel({
-    originalText: rawText,
-    updatedText: rawText,
     parsedSections: [
       {
         id: 'section-header',
@@ -644,10 +625,6 @@ Acme Corp`;
 test('buildSectionViewModel keeps parsed section lines when both parsed and canonical data exist', () => {
   const parsedSummaryLine = 'Parsed summary from section block';
   const rows = buildSectionViewModel({
-    originalText: `Professional Summary
-${parsedSummaryLine}`,
-    updatedText: `Professional Summary
-${parsedSummaryLine}`,
     parsedSections: [
       {
         id: 'section-summary',
@@ -679,10 +656,6 @@ ${parsedSummaryLine}`,
 
 test('buildSectionViewModel uses canonical summary fallback when parsed summary is missing', () => {
   const rows = buildSectionViewModel({
-    originalText: `Experience
-- Built backend APIs`,
-    updatedText: `Experience
-- Built backend APIs`,
     parsedSections: [
       {
         id: 'section-work',
@@ -718,10 +691,6 @@ test('buildSectionViewModel prefers canonical updated summary when parsed summar
   const editedCanonicalSummary = 'Edited summary saved to canonical resume data';
 
   const rows = buildSectionViewModel({
-    originalText: `Professional Summary
-${parsedSummaryLine}`,
-    updatedText: `Professional Summary
-${parsedSummaryLine}`,
     parsedSections: [
       {
         id: 'section-summary',
@@ -753,29 +722,6 @@ ${parsedSummaryLine}`,
 });
 
 test('buildSectionViewModel prefers canonical section content and avoids multi-column spillover', () => {
-  const rawText = `NIKOLA STANOJEVIC
-PROFILE
-Fast learner and good at acquiring new knowledges.
-EXPERTISE
-WORK EXPERIENCE
-Creativity
-Responsibility
-Without work experience
-LANGUAGES
-English - Professional working proficiency
-EDUCATION
-ELSE
-University of Belgrade, Faculty of Organizational Sciences 2020 - 2024
-Attended to Startit to Belgrade Java beginner course in 2018
-SKILL
-Fifth Belgrade Gymnasium 2016 - 2020
-Communicative
-Learning
-80%
-70%
-75%
-90%`;
-
   const parsedSections: ResumeSectionBlockV2[] = [
     {
       id: 'sec_header',
@@ -844,8 +790,6 @@ Learning
   ];
 
   const rows = buildSectionViewModel({
-    originalText: rawText,
-    updatedText: rawText,
     parsedSections,
     resumeData: {
       basics: {
@@ -921,14 +865,7 @@ test('buildSectionViewModel keeps custom section updated lines from parsed secti
     },
   ];
 
-  const rawText = `EDUCATION
-ELSE
-University of Belgrade, Faculty of Organizational Sciences 2020 - 2024
-Attended to Startit to Belgrade Java beginner course in 2018`;
-
   const rows = buildSectionViewModel({
-    originalText: rawText,
-    updatedText: rawText,
     parsedSections,
     resumeData: {
       basics: undefined,
@@ -987,10 +924,6 @@ test('buildSectionViewModel reflects work bullet changes when resume data is pat
   );
 
   const rows = buildSectionViewModel({
-    originalText: `Experience
-- Built backend APIs`,
-    updatedText: `Experience
-- Built and scaled backend APIs`,
     parsedSections: [
       {
         id: 'section-work',

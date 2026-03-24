@@ -194,13 +194,15 @@ Serbian (native), English (fluent), German (basic)
 export async function analyzeResume(
   resume: ResumeInput,
   jobDescription: JobDescription
-): Promise<AnalysisResult> {
+): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2 }> {
   const res = await fetchWithAuth('/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       resumeText: resume.content,
       jobDescription: jobDescription.text,
+      inputType: resume.type,
+      fileName: resume.fileName,
     }),
   }, 'Analyze failed');
 
@@ -217,7 +219,7 @@ export async function analyzeResume(
     targetRole?: string;
     company?: string;
     missingKeywords?: string[];
-    rewrittenBullets?: Array<{ section?: string; original?: string; improved?: string }>;
+    rewrittenBullets?: Array<{ section?: string; type?: string; original?: string; improved?: string }>;
     rewriteSuggestions?: Array<{
       section?: string;
       originalText?: string;
@@ -226,9 +228,10 @@ export async function analyzeResume(
     }>;
     atsWarnings?: string[];
     suggestions?: string[];
+    skillCategoryRenames?: Array<{ from?: string; to?: string }>;
   };
 
-  return {
+  const result: AnalysisResult = {
     id: `analysis-${Date.now()}`,
     createdAt: new Date().toISOString(),
 
@@ -251,8 +254,12 @@ export async function analyzeResume(
       section: normalizeBulletSection(b.section),
       original: b.original ?? '',
       improved: b.improved ?? '',
-      type: 'modified' as const,
+      type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
     })),
+
+    skillCategoryRenames: (ai.skillCategoryRenames || [])
+      .filter((r): r is { from: string; to: string } => Boolean(r.from && r.to))
+      .map(r => ({ from: r.from!, to: r.to! })),
 
     rewriteSuggestions: (ai.rewriteSuggestions || []).map((s, i: number) => ({
       id: `rw-${i}`,
@@ -279,6 +286,8 @@ export async function analyzeResume(
       completed: false,
     })),
   };
+
+  return { result, parsed: json.parsed as AiParsedResumePayloadV2 };
 }
 
 export async function parseResume(request: {
@@ -300,6 +309,8 @@ export async function parseResume(request: {
   if (!json?.data) {
     throw new Error("Invalid parse API response: missing 'data' field.");
   }
+
+  console.log('[api.ts parseResume] response data:', JSON.stringify(json.data, null, 2));
 
   return json.data as AiParsedResumePayloadV2;
 }

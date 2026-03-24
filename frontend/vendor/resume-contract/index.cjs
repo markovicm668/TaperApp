@@ -866,6 +866,18 @@ function parseAnalysisSnapshot(value, path = 'analysisSnapshot') {
     status: asEnum(obj.status, ['completed', 'processing', 'failed'], `${path}.status`),
     keywordGaps: asArray(obj.keywordGaps, `${path}.keywordGaps`, parseKeywordGap, []),
     bulletChanges: asArray(obj.bulletChanges, `${path}.bulletChanges`, parseBulletChange, []),
+    skillCategoryRenames: asArray(
+      obj.skillCategoryRenames,
+      `${path}.skillCategoryRenames`,
+      (item, itemPath) => {
+        const o = assertObject(item, itemPath);
+        return {
+          from: asString(o.from, `${itemPath}.from`),
+          to: asString(o.to, `${itemPath}.to`),
+        };
+      },
+      []
+    ),
     rewriteSuggestions: asArray(
       obj.rewriteSuggestions,
       `${path}.rewriteSuggestions`,

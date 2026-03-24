@@ -3,7 +3,7 @@ const { getEnv } = require("../config/env");
 const { validateParsedPayload } = require("./aiContracts");
 const { buildParsedPayload, normalizeStringArray } = require("./parseMappers");
 
-const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-3.1-pro-preview";
+const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-3-flash-preview";
 const MAX_GEMINI_ATTEMPTS = 2;
 
 function createGeminiGenerateContent({ modelName = DEFAULT_MODEL } = {}) {
@@ -160,7 +160,7 @@ Output schema (JSON):
       }
     ],
     "awards": [{ "id": "string", "title": "string", "issuer": "string", "date": "string", "summary": "string" }],
-    "skills": [{ "id": "string", "name": "string", "category": "technical" }],
+    "skills": [{ "id": "string", "name": "string", "category": "string (the category label as it appears in the resume, e.g. 'E-commerce platforms', 'Tools', 'Soft skills')" }],
     "languages": [{ "id": "string", "language": "string", "fluency": "string" }],
     "customSections": [{ "id": "string", "title": "string", "items": [{ "id": "string", "text": "string" }] }],
     "sectionOrder": ["summary", "work", "projects", "education", "skills", "awards", "languages", "customSections"],
@@ -271,6 +271,9 @@ async function parseResumeSections(
       const startedAt = Date.now();
       const modelOutput = await geminiGenerateContent(prompt);
       const elapsed = Date.now() - startedAt;
+
+      // eslint-disable-next-line no-console
+      console.log("-> Gemini parse raw output:\n", modelOutput);
 
       const payload = mapModelOutputToPayload({
         modelOutput,

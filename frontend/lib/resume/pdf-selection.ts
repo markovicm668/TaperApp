@@ -1,16 +1,8 @@
 import type { ResumeLocationV2, ResumeProfileV2 } from '@resume-scanner/resume-contract';
 import type { ResumeExportSection, ResumePdfPayload } from '../types';
+import { nonEmpty, normalizeMatchText, normalizeWhitespace, type CanonicalSectionKind } from './normalize';
 
 type TriState = 'checked' | 'unchecked' | 'indeterminate';
-type CanonicalSectionKind =
-  | 'header'
-  | 'summary'
-  | 'work'
-  | 'projects'
-  | 'skills'
-  | 'education'
-  | 'awards'
-  | 'languages';
 
 export type PdfSelectionItemKind =
   | 'header-slot'
@@ -33,9 +25,11 @@ export interface PdfSelectableItem {
   sectionKey: string;
   kind: PdfSelectionItemKind;
   label?: string;
+  category?: string;
   parentKey?: string;
   childKeys: string[];
   matchTexts?: string[];
+  defaultUnchecked?: boolean;
 }
 
 export interface PdfSelectableSection {
@@ -63,20 +57,6 @@ const CANONICAL_SECTION_TITLES: Record<CanonicalSectionKind, string> = {
   awards: 'Achievements',
   languages: 'Languages',
 };
-
-function nonEmpty(value: unknown): string | undefined {
-  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
-  const text = String(value).trim();
-  return text ? text : undefined;
-}
-
-function normalizeWhitespace(value: string): string {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function normalizeMatchText(value: string): string {
-  return normalizeWhitespace(value).toLowerCase();
-}
 
 function formatLocation(location: ResumeLocationV2 | undefined): string | undefined {
   if (!location) return undefined;
@@ -394,13 +374,18 @@ export function buildPdfSelectionModel(payload: ResumePdfPayload): PdfSelectionM
   (Array.isArray(payload.skills) ? payload.skills : []).forEach((skill, index) => {
     const label = nonEmpty(skill?.name);
     if (!label) return;
+    const originalLabel = nonEmpty(skill?.originalName);
+    const matchTexts = [label];
+    if (originalLabel && originalLabel !== label) matchTexts.push(originalLabel);
     addItem(model, {
       key: skillKey(skill, index),
       sectionKey: canonicalSectionKey('skills'),
       kind: 'skill',
       label,
+      category: nonEmpty(skill?.category),
       childKeys: [],
-      matchTexts: [label],
+      matchTexts,
+      defaultUnchecked: skill?.source === 'removed' || undefined,
     });
   });
 
@@ -467,8 +452,10 @@ function applyCheckedState(
   return next;
 }
 
-function getLeafState(overrides: PdfSelectionOverrides, key: string): TriState {
-  return isRawKeyChecked(overrides, key) ? 'checked' : 'unchecked';
+function getLeafState(model: PdfSelectionModel, overrides: PdfSelectionOverrides, key: string): TriState {
+  if (key in overrides) return overrides[key] === false ? 'unchecked' : 'checked';
+  const item = model.items[key];
+  return item?.defaultUnchecked ? 'unchecked' : 'checked';
 }
 
 export function getPdfItemCheckState(
@@ -479,7 +466,7 @@ export function getPdfItemCheckState(
   if (!model) return 'checked';
   const item = model.items[itemKey];
   if (!item) return 'checked';
-  if (!item.childKeys.length) return getLeafState(overrides, itemKey);
+  if (!item.childKeys.length) return getLeafState(model, overrides, itemKey);
 
   let checkedCount = 0;
   let uncheckedCount = 0;
@@ -505,7 +492,7 @@ export function getPdfSectionCheckState(
   if (!model) return 'checked';
   const section = model.sections[sectionKey];
   if (!section) return 'checked';
-  if (!section.itemKeys.length) return getLeafState(overrides, sectionKey);
+  if (!section.itemKeys.length) return getLeafState(model, overrides, sectionKey);
 
   let checkedCount = 0;
   let uncheckedCount = 0;

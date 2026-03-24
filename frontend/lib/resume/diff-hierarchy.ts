@@ -1,4 +1,5 @@
 import type { SectionViewModelRow } from './mappers';
+import { normalizeWhitespace } from './normalize';
 
 export type DiffHierarchyRow =
   | { id: string; type: 'spacer' }
@@ -76,10 +77,6 @@ const DATE_RANGE_RE = new RegExp(
 
 const LOCATION_KEYWORD_RE = /^(remote|hybrid|on-site|onsite|worldwide)$/i;
 const REMOTE_MIX_RE = /\b(remote|hybrid|on-site|onsite)\b/i;
-
-function normalizeWhitespace(value: string): string {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
 
 export function isNeutralRow(row: DiffHierarchyRow): row is DiffHierarchyNeutralRow {
   return row.type === 'neutral';
@@ -375,6 +372,7 @@ function buildEntryLikeBlocks(
 function buildSkillsBlocks(groups: DiffHierarchyContentRow[][]): DiffHierarchyBlock[] {
   return groups.map((group, index) => {
     const first = group[0];
+    // Neutral category header (unchanged)
     if (first && isNeutralRow(first) && isSkillCategoryLine(first.text)) {
       return {
         id: `skills-${index + 1}`,
@@ -383,7 +381,31 @@ function buildSkillsBlocks(groups: DiffHierarchyContentRow[][]): DiffHierarchyBl
         rows: group.slice(1),
       };
     }
-    return buildSimpleListBlock(`skills-${index + 1}`, group, 'bulleted');
+    // Renamed category header (modified row where the improved text is a category line)
+    if (first && first.type === 'modified' && isSkillCategoryLine(first.improved)) {
+      return {
+        id: `skills-${index + 1}`,
+        type: 'skills-category',
+        title: normalizeWhitespace(first.improved).replace(/:\s*$/, ''),
+        rows: group,
+      };
+    }
+    // New category header (added row that looks like a category line)
+    if (first && first.type === 'added' && isSkillCategoryLine(first.text)) {
+      return {
+        id: `skills-${index + 1}`,
+        type: 'skills-category',
+        title: normalizeWhitespace(first.text).replace(/:\s*$/, ''),
+        rows: group.slice(1),
+      };
+    }
+    // For skills, never produce unplaced-changes — always render as a bulleted list
+    return {
+      id: `skills-${index + 1}`,
+      type: 'simple-list',
+      listStyle: 'bulleted' as const,
+      rows: group,
+    };
   });
 }
 

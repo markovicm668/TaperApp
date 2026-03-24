@@ -117,18 +117,27 @@ export function resumeReducer(
       const snapshot = action.payload.snapshot;
       const nextBulletChanges = snapshot ? snapshot.bulletChanges : [];
 
+      const appliedResumeData = snapshot
+        ? applyBulletChangesToResumeData(state.workspace.resumeData, nextBulletChanges, 'ai', snapshot.skillCategoryRenames)
+        : state.workspace.resumeData;
+
+      // Strip [Category] bracket prefix from skill additions so diff-view shows clean text
+      const cleanedBulletChanges = nextBulletChanges.map(bc =>
+        bc.section?.toLowerCase() === 'skills' && bc.type === 'added' && /^\[[^\]]+\]\s+/.test(bc.improved)
+          ? { ...bc, improved: bc.improved.replace(/^\[[^\]]+\]\s+/, '') }
+          : bc,
+      );
+
       return {
         ...state,
         workspace: withUpdatedTimestamp({
           ...state.workspace,
-          resumeData: snapshot
-            ? applyBulletChangesToResumeData(state.workspace.resumeData, nextBulletChanges, 'ai')
-            : state.workspace.resumeData,
+          resumeData: appliedResumeData,
           analysis: {
             ...state.workspace.analysis,
             resultId: snapshot?.id || null,
             lastAnalysisResult: snapshot,
-            bulletChanges: nextBulletChanges,
+            bulletChanges: cleanedBulletChanges,
           },
         }),
       };

@@ -49,20 +49,12 @@ export default function AnalyzePage() {
     });
 
     try {
-      const [analysisResultResponse, parseResultResponse] = await Promise.all([
-        analyzeResume(
-          { type: resumeData.type, content: resumeData.content, fileName: resumeData.fileName },
-          { text: jobDescription }
-        ),
-        parseResume({
-          resumeText: resumeData.content,
-          inputType: resumeData.type,
-          fileName: resumeData.fileName,
-        }),
-      ]);
+      const { result, parsed } = await analyzeResume(
+        { type: resumeData.type, content: resumeData.content, fileName: resumeData.fileName },
+        { text: jobDescription }
+      );
 
-      setParsedPayload(parseResultResponse);
-      const result = analysisResultResponse;
+      setParsedPayload(parsed);
 
       const resultWithSource: AnalysisResult = {
         ...result,

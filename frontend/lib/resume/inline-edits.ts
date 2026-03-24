@@ -11,6 +11,7 @@ import type {
   ResumeTechnologyV2,
   ResumeWorkItemV2,
 } from '@resume-scanner/resume-contract';
+import { nonEmpty, normalizeWhitespace } from './normalize';
 
 type InlineEntrySection = 'work' | 'projects' | 'education' | 'awards';
 
@@ -74,15 +75,6 @@ type ParsedInlineItemKey =
 const NON_EMPTY_TOKEN_RE = /^(?:0|[1-9]\d*)$/;
 const PRESENT_RE = /^(present|current|now)$/i;
 
-function nonEmptyText(value: unknown): string | undefined {
-  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
-  const text = String(value).trim();
-  return text.length ? text : undefined;
-}
-
-function normalizeWhitespace(value: string): string {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
 
 function normalizeCategory(value: string | undefined): string {
   return normalizeWhitespace(value || 'General').toLowerCase();
@@ -117,15 +109,15 @@ function splitOnFirst(
 
 function parseHeadingPair(text: string): { primary?: string; secondary?: string } {
   const parts = splitOnFirst(text, /^(.*?)(?:\s(?:-|–|—)\s)(.+)$/u);
-  const primary = nonEmptyText(parts.left);
-  const secondary = nonEmptyText(parts.right);
+  const primary = nonEmpty(parts.left);
+  const secondary = nonEmpty(parts.right);
   return { primary, secondary };
 }
 
 function parseDateRange(text: string): { startDate?: string; endDate?: string; isCurrent?: boolean } {
   const parts = splitOnFirst(text, /^(.*?)(?:\s(?:-|–|—|to)\s)(.+)$/iu);
-  const startDate = nonEmptyText(parts.left);
-  const endRaw = nonEmptyText(parts.right);
+  const startDate = nonEmpty(parts.left);
+  const endRaw = nonEmpty(parts.right);
   if (!endRaw) {
     return {
       startDate,
@@ -148,7 +140,7 @@ function parseDateRange(text: string): { startDate?: string; endDate?: string; i
 }
 
 function parseLocationLine(text: string): ResumeLocationV2 | undefined {
-  const normalized = nonEmptyText(text);
+  const normalized = nonEmpty(text);
   if (!normalized) return undefined;
   const parts = normalized
     .split(',')
@@ -190,8 +182,8 @@ function parseLocationLine(text: string): ResumeLocationV2 | undefined {
 
 function parseDegreeAreaLine(text: string): { degree?: string; area?: string } {
   const parts = splitOnFirst(text, /^(.*?),(.+)$/u);
-  const degree = nonEmptyText(parts.left);
-  const area = nonEmptyText(parts.right);
+  const degree = nonEmpty(parts.left);
+  const area = nonEmpty(parts.right);
   return {
     degree,
     area,
@@ -200,7 +192,7 @@ function parseDegreeAreaLine(text: string): { degree?: string; area?: string } {
 
 function parseGpaLine(text: string): string | undefined {
   const normalized = String(text || '').replace(/^gpa\s*:\s*/i, '');
-  return nonEmptyText(normalized);
+  return nonEmpty(normalized);
 }
 
 function parseTechnologyNames(text: string): string[] {
@@ -214,8 +206,8 @@ function parseTechnologyNames(text: string): string[] {
 function parseLanguageLine(text: string): { language?: string; fluency?: string } {
   const parts = splitOnFirst(text, /^(.*?)(?:\s(?:-|–|—)\s)(.+)$/u);
   return {
-    language: nonEmptyText(parts.left),
-    fluency: nonEmptyText(parts.right),
+    language: nonEmpty(parts.left),
+    fluency: nonEmpty(parts.right),
   };
 }
 
@@ -226,8 +218,8 @@ function parseHeaderProfileLine(
   const normalized = String(text || '').trim();
   const colonIndex = normalized.indexOf(':');
   if (colonIndex > -1) {
-    const network = nonEmptyText(normalized.slice(0, colonIndex));
-    const url = nonEmptyText(normalized.slice(colonIndex + 1));
+    const network = nonEmpty(normalized.slice(0, colonIndex));
+    const url = nonEmpty(normalized.slice(colonIndex + 1));
     return {
       ...(existing || {}),
       network,
@@ -237,7 +229,7 @@ function parseHeaderProfileLine(
 
   return {
     ...(existing || {}),
-    url: nonEmptyText(normalized),
+    url: nonEmpty(normalized),
   };
 }
 
@@ -734,7 +726,7 @@ export function applyInlineEditToResumeData(
   target: ResumeInlineEditTarget,
   rawText: string
 ): ResumeDataV2 {
-  const text = nonEmptyText(rawText);
+  const text = nonEmpty(rawText);
   if (!text) return resumeData;
 
   if (target.kind === 'item') {
@@ -752,7 +744,7 @@ export function applyInlineEditToParsedMeta(
   rawText: string
 ): AiParsedMetaV2 | null {
   if (!parsedMeta) return parsedMeta;
-  const text = nonEmptyText(rawText);
+  const text = nonEmpty(rawText);
   if (!text) return parsedMeta;
   if (target.kind !== 'item') return parsedMeta;
 
