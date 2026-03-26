@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Manrope, Source_Serif_4 } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import AppWrapper from './AppWrapper';
 import './globals.css';
 
@@ -46,6 +47,7 @@ export default function RootLayout({
       <body className={`${manrope.variable} ${sourceSerif.variable} ${plexMono.variable} font-sans antialiased`}>
         <AppWrapper>{children}</AppWrapper>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
