@@ -45,7 +45,7 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!isHydrated) return;
     if (!analysisResult) {
-      router.push('/');
+      router.push('/analyze');
     }
   }, [analysisResult, isHydrated, router]);
 
@@ -127,7 +127,7 @@ export default function ResultsPage() {
 
   const handleReset = () => {
     resetWorkspace();
-    router.push('/');
+    router.push('/analyze');
   };
 
   const handleDownloadPdf = async () => {

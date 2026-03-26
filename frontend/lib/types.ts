@@ -16,6 +16,7 @@ export interface ResumeInput {
   type: 'file' | 'text' | 'linkedin';
   content: string;
   fileName?: string;
+  file?: File;
 }
 
 export interface JobDescription {

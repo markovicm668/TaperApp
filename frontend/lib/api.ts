@@ -76,6 +76,17 @@ async function fetchWithAuth(
     }
   }
 
+  if (res.status === 402) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data?.error?.message || 'Insufficient tokens') as Error & {
+      code: string;
+      tokensRemaining: number;
+    };
+    err.code = 'INSUFFICIENT_TOKENS';
+    err.tokensRemaining = data?.error?.tokensRemaining ?? 0;
+    throw err;
+  }
+
   if (!res.ok) {
     throw new Error(await parseApiErrorMessage(res, fallbackErrorMessage));
   }
@@ -193,8 +204,9 @@ Serbian (native), English (fluent), German (basic)
 // API Functions
 export async function analyzeResume(
   resume: ResumeInput,
-  jobDescription: JobDescription
-): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2 }> {
+  jobDescription: JobDescription,
+  parsedResumeData?: AiParsedResumePayloadV2['resumeData']
+): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2; tokensRemaining?: number }> {
   const res = await fetchWithAuth('/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -203,6 +215,7 @@ export async function analyzeResume(
       jobDescription: jobDescription.text,
       inputType: resume.type,
       fileName: resume.fileName,
+      ...(parsedResumeData ? { parsedResumeData } : {}),
     }),
   }, 'Analyze failed');
 
@@ -287,14 +300,14 @@ export async function analyzeResume(
     })),
   };
 
-  return { result, parsed: json.parsed as AiParsedResumePayloadV2 };
+  return { result, parsed: json.parsed as AiParsedResumePayloadV2, tokensRemaining: json.tokensRemaining };
 }
 
 export async function parseResume(request: {
   resumeText: string;
   inputType?: 'file' | 'text' | 'linkedin';
   fileName?: string;
-}): Promise<AiParsedResumePayloadV2> {
+}): Promise<AiParsedResumePayloadV2 & { tokensRemaining?: number }> {
   const res = await fetchWithAuth('/parse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -312,7 +325,139 @@ export async function parseResume(request: {
 
   console.log('[api.ts parseResume] response data:', JSON.stringify(json.data, null, 2));
 
-  return json.data as AiParsedResumePayloadV2;
+  const parsed = json.data as AiParsedResumePayloadV2 & { tokensRemaining?: number };
+  parsed.tokensRemaining = json.tokensRemaining;
+  return parsed;
+}
+
+export async function fetchUserProfile(
+  referralCode?: string
+): Promise<{ tokensRemaining: number; referralCode: string }> {
+  const query = referralCode ? `?ref=${encodeURIComponent(referralCode)}` : '';
+  const res = await fetchWithAuth(`/user/me${query}`, { method: 'GET' }, 'Failed to fetch user profile');
+  return res.json();
+}
+
+export async function parseResumePdf(
+  file: File
+): Promise<AiParsedResumePayloadV2 & { tokensRemaining?: number }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetchWithAuth('/parse-pdf', {
+    method: 'POST',
+    body: formData,
+  }, 'PDF parse failed');
+
+  const json = await res.json();
+  if (!json?.data) {
+    throw new Error("Invalid parse API response: missing 'data' field.");
+  }
+
+  const parsed = json.data as AiParsedResumePayloadV2 & { tokensRemaining?: number };
+  parsed.tokensRemaining = json.tokensRemaining;
+  return parsed;
+}
+
+export async function analyzeResumePdf(
+  file: File,
+  jobDescription: string,
+  parsedResumeData?: AiParsedResumePayloadV2['resumeData']
+): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2; tokensRemaining?: number }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('jobDescription', jobDescription);
+  if (parsedResumeData) {
+    formData.append('parsedResumeData', JSON.stringify(parsedResumeData));
+  }
+
+  const res = await fetchWithAuth('/analyze/pdf', {
+    method: 'POST',
+    body: formData,
+  }, 'PDF analyze failed');
+
+  const json = await res.json();
+
+  if (!json || !json.data) {
+    throw new Error("Invalid API response format: missing 'data' field.");
+  }
+
+  const ai = json.data as {
+    matchScore?: number;
+    roleSeniority?: AnalysisResult['roleSeniority'];
+    overallFit?: AnalysisResult['overallFit'];
+    targetRole?: string;
+    company?: string;
+    missingKeywords?: string[];
+    rewrittenBullets?: Array<{ section?: string; type?: string; original?: string; improved?: string }>;
+    rewriteSuggestions?: Array<{
+      section?: string;
+      originalText?: string;
+      improvedText?: string;
+      rationale?: string;
+    }>;
+    atsWarnings?: string[];
+    suggestions?: string[];
+    skillCategoryRenames?: Array<{ from?: string; to?: string }>;
+  };
+
+  const result: AnalysisResult = {
+    id: `analysis-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+
+    matchScore: ai.matchScore ?? 0,
+    roleSeniority: ai.roleSeniority ?? 'mid',
+    overallFit: ai.overallFit ?? 'good',
+
+    targetRole: ai.targetRole || 'Unknown Role',
+    company: ai.company || 'Unknown Company',
+    status: 'completed',
+
+    keywordGaps: (ai.missingKeywords || []).map((kw: string) => ({
+      keyword: kw,
+      importance: 'medium',
+      suggestedPhrases: [],
+      category: 'Missing keyword',
+    })),
+
+    bulletChanges: (ai.rewrittenBullets || []).map(b => ({
+      section: normalizeBulletSection(b.section),
+      original: b.original ?? '',
+      improved: b.improved ?? '',
+      type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
+    })),
+
+    skillCategoryRenames: (ai.skillCategoryRenames || [])
+      .filter((r): r is { from: string; to: string } => Boolean(r.from && r.to))
+      .map(r => ({ from: r.from!, to: r.to! })),
+
+    rewriteSuggestions: (ai.rewriteSuggestions || []).map((s, i: number) => ({
+      id: `rw-${i}`,
+      section: normalizeRewriteSection(s.section),
+      originalText: s.originalText ?? '',
+      improvedText: s.improvedText ?? '',
+      rationale: s.rationale ?? '',
+      atsNotes: '',
+    })),
+
+    atsChecks: (ai.atsWarnings || []).map((w: string, i: number) => ({
+      id: `ats-${i}`,
+      name: 'ATS Warning',
+      status: 'warning',
+      message: w,
+      tip: 'Consider revising this section',
+    })),
+
+    riskFlags: [],
+
+    recommendedEdits: (ai.suggestions || []).map((s: string, i: number) => ({
+      id: `re-${i}`,
+      text: s,
+      completed: false,
+    })),
+  };
+
+  return { result, parsed: json.parsed as AiParsedResumePayloadV2, tokensRemaining: json.tokensRemaining };
 }
 
 export async function exportResumePdf(resume: ResumePdfPayload): Promise<Blob> {

@@ -93,6 +93,11 @@ function getFirebaseAuth() {
   return getFirebaseAdminApp().auth();
 }
 
+function getFirebaseFirestore() {
+  return getFirebaseAdminApp().firestore();
+}
+
 module.exports = {
   getFirebaseAuth,
+  getFirebaseFirestore,
 };

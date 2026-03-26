@@ -14,47 +14,52 @@ import type { AnalysisStep } from '@/lib/types';
 
 interface AnalysisProgressProps {
   open: boolean;
+  parseDone: boolean;
   onComplete: () => void;
 }
 
 const steps: { key: AnalysisStep; label: string; duration: number }[] = [
-  { key: 'parsing', label: 'Parsing resume', duration: 1500 },
+  { key: 'parsing', label: 'Parsing resume', duration: 0 },
   { key: 'extracting', label: 'Extracting requirements', duration: 2000 },
   { key: 'matching', label: 'Matching keywords', duration: 2500 },
   { key: 'rewriting', label: 'Rewriting bullets', duration: 2000 },
   { key: 'complete', label: 'Analysis complete', duration: 500 },
 ];
 
-export function AnalysisProgress({ open, onComplete }: AnalysisProgressProps) {
+export function AnalysisProgress({ open, parseDone, onComplete }: AnalysisProgressProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
+  // Reset when dialog closes
   useEffect(() => {
     if (!open) {
       setCurrentStepIndex(0);
-      return;
     }
+  }, [open]);
 
-    let timeoutId: NodeJS.Timeout;
+  // Step 0 (parsing) waits for parseDone signal instead of a timer
+  useEffect(() => {
+    if (open && parseDone && currentStepIndex === 0) {
+      setCurrentStepIndex(1);
+    }
+  }, [open, parseDone, currentStepIndex]);
 
-    const advanceStep = (index: number) => {
-      if (index < steps.length - 1) {
-        timeoutId = setTimeout(() => {
-          setCurrentStepIndex(index + 1);
-          advanceStep(index + 1);
-        }, steps[index].duration);
+  // Steps 1+ advance on timers
+  useEffect(() => {
+    if (!open || currentStepIndex === 0) return;
+
+    const step = steps[currentStepIndex];
+    if (!step) return;
+
+    const timeoutId = setTimeout(() => {
+      if (currentStepIndex < steps.length - 1) {
+        setCurrentStepIndex(currentStepIndex + 1);
       } else {
-        timeoutId = setTimeout(() => {
-          onComplete();
-        }, steps[index].duration);
+        onComplete();
       }
-    };
+    }, step.duration);
 
-    advanceStep(0);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [open, onComplete]);
+    return () => clearTimeout(timeoutId);
+  }, [open, currentStepIndex, onComplete]);
 
   return (
     <Dialog open={open}>

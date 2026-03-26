@@ -199,7 +199,14 @@ EXPERIENCE bullets (section: "experience" or "projects"):
 
 SKILLS (section: "skills"):
 - Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume (type: "added", original: "", improved: "[CategoryName] skill name" — prefix with the target category in square brackets). IMPORTANT: the CategoryName MUST be one of the exact category names already present in the resume (e.g. if the resume has "Soft", use "[Soft]" not "[Soft Skills]"). Only create a new category name if no existing category is a reasonable fit.
-- Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")`;
+- Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")
+- Remove skills that are clearly not relevant to the JOB DESCRIPTION (type: "removed", original: "SkillName", improved: "")
+- Do not add or remove more than 5 skills in total
+- For category renames, only rename if it improves alignment with the JOB DESCRIPTION
+- Try to keep the same number of skills in each category unless the JOB DESCRIPTION indicates a clear need for more or fewer skills in that category
+- Try not to have less than 2 skills in a category
+
+`;
 
   console.log("-> Gemini rewrite input data:", {
     usingParsedResume: Boolean(parsedResumeData),
@@ -207,7 +214,9 @@ SKILLS (section: "skills"):
     jobDescriptionLength: jobDescription?.length ?? 0,
   });
 
+  const analyzeStart = Date.now();
   const result = await model.generateContent(prompt);
+  console.log(`-> Gemini analysis call took ${Date.now() - analyzeStart}ms`);
 
   const outputText = result.response.text();
 

@@ -1,6 +1,7 @@
 const express = require("express");
 const { validateParseRequest } = require("../utils/validateRequest");
 const { parseResumeSections } = require("../services/geminiParseService");
+const { ExecutableCodeLanguage } = require("@google/generative-ai");
 
 function createParseRouter({ parseResume = parseResumeSections } = {}) {
   const router = express.Router();
@@ -23,6 +24,10 @@ function createParseRouter({ parseResume = parseResumeSections } = {}) {
       const { resumeText, inputType, fileName } = validation.data;
       const parseResult = await parseResume({ resumeText, inputType, fileName });
 
+      
+
+      ExecutableCodeLanguage
+
       // eslint-disable-next-line no-console
       console.log(
         JSON.stringify({
@@ -37,6 +42,7 @@ function createParseRouter({ parseResume = parseResumeSections } = {}) {
       return res.status(200).json({
         success: true,
         data: parseResult.payload,
+        tokensRemaining: req.tokensRemaining,
       });
     } catch (error) {
       // eslint-disable-next-line no-console

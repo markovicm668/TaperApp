@@ -5,6 +5,16 @@ const { buildParsedPayload, normalizeStringArray } = require("./parseMappers");
 
 const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-3-flash-preview";
 const MAX_GEMINI_ATTEMPTS = 2;
+const GEMINI_TIMEOUT_MS = 60_000;
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini API timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
 
 function createGeminiGenerateContent({ modelName = DEFAULT_MODEL } = {}) {
   const geminiClient = new GoogleGenerativeAI(getEnv("GEMINI_API_KEY"));
@@ -16,7 +26,10 @@ function createGeminiGenerateContent({ modelName = DEFAULT_MODEL } = {}) {
   });
 
   return async (prompt) => {
-    const result = await model.generateContent(prompt);
+    const result = await withTimeout(
+      model.generateContent(prompt),
+      GEMINI_TIMEOUT_MS
+    );
     return result.response.text();
   };
 }

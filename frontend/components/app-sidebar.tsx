@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { BarChart3, FileSearch, HelpCircle, History, Settings, Zap } from 'lucide-react';
+import { BarChart3, Copy, FileSearch, HelpCircle, History, Settings, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/useAuth';
+import { useTokens } from '@/lib/tokens/TokenContext';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +32,7 @@ interface AppSidebarProps {
 }
 
 const navItems = [
-  { href: '/', label: 'Analyze', icon: FileSearch },
+  { href: '/analyze', label: 'Analyze', icon: FileSearch },
   { href: '/results', label: 'Results', icon: BarChart3, requiresResults: true },
   { href: '/history', label: 'History', icon: History },
   { href: '/settings', label: 'Settings', icon: Settings },
@@ -52,6 +53,16 @@ export function AppSidebar({
   const isCompact = mode === 'compact';
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { signOut } = useAuth();
+  const { referralCode } = useTokens();
+
+  const handleCopyReferralLink = () => {
+    if (!referralCode) return;
+    const link = `${window.location.origin}?ref=${referralCode}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Referral link copied!', {
+      description: 'Share it with friends to earn 25 credits when they complete their first analysis.',
+    });
+  };
   const [homeItem, ...mainItems] = navItems;
   const initials =
     userName
@@ -64,7 +75,7 @@ export function AppSidebar({
   const compactCreditsValue = creditsRemaining > 999 ? '999+' : String(Math.max(0, creditsRemaining));
   const toggleLabel = isCompact ? 'Expand sidebar' : 'Collapse sidebar';
 
-  const isActivePath = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const isActivePath = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   const handleSignOut = async () => {
     try {
@@ -308,6 +319,23 @@ export function AppSidebar({
                     <p>Credits: {creditsRemaining}</p>
                   </TooltipContent>
                 </Tooltip>
+                {isAuthenticated && referralCode && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="h-10 w-10 rounded-xl border border-border/80 bg-background/70 p-0"
+                        onClick={handleCopyReferralLink}
+                        aria-label="Copy referral link"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Copy referral link</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 {renderProfileMenu()}
               </div>
             </div>
@@ -335,6 +363,16 @@ export function AppSidebar({
                     {creditsRemaining}
                   </span>
                 </Badge>
+                {isAuthenticated && referralCode && (
+                  <Button
+                    variant="outline"
+                    className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
+                    onClick={handleCopyReferralLink}
+                  >
+                    <span className="text-[11px] tracking-wide text-muted-foreground">Refer & Earn</span>
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                )}
                 {renderProfileMenu()}
               </div>
             </div>

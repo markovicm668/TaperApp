@@ -1,243 +1,236 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { Zap, RotateCcw } from 'lucide-react';
-import { toast } from 'sonner';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  FileSearch,
+  Target,
+  Sparkles,
+  ShieldCheck,
+  Zap,
+  Upload,
+  ScanSearch,
+  Download,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ResumeInputCard } from '@/components/resume-input-card';
-import { JobDescriptionCard } from '@/components/job-description-card';
-import { AnalysisProgress } from '@/components/analysis-progress';
-import { analyzeResume, parseResume } from '@/lib/api';
-import { analysisResultToSnapshot } from '@/lib/resume/mappers';
-import { useResumeActions } from '@/lib/resume/store';
-import type { AnalysisResult, ResumeInput } from '@/lib/types';
+import { useAuth } from '@/lib/auth/useAuth';
 
-export default function AnalyzePage() {
-  const router = useRouter();
-  const {
-    setSourceInput,
-    setAnalysisSnapshot,
-    setParsedPayload,
-    resetWorkspace,
-  } =
-    useResumeActions();
+export default function LandingPage() {
+  const { user, loading } = useAuth();
 
-  const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
-  const [jobDescription, setJobDescription] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isParsingOnly, setIsParsingOnly] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const progressCompleteRef = useRef(false);
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
-  const canAnalyze = resumeData && jobDescription.trim().length > 50;
-  const canParseOnly = Boolean(resumeData);
-  const isBusy = isAnalyzing || isParsingOnly;
-
-  const handleAnalyze = useCallback(async () => {
-    if (!resumeData || !jobDescription) return;
-
-    setIsAnalyzing(true);
-    setAnalysisResult(null);
-    progressCompleteRef.current = false;
-
-    setSourceInput({
-      inputType: resumeData.type,
-      rawText: resumeData.content,
-      fileName: resumeData.fileName,
-      clearAnalysis: true,
-    });
-
-    try {
-      const { result, parsed } = await analyzeResume(
-        { type: resumeData.type, content: resumeData.content, fileName: resumeData.fileName },
-        { text: jobDescription }
-      );
-
-      setParsedPayload(parsed);
-
-      const resultWithSource: AnalysisResult = {
-        ...result,
-        id: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-      };
-
-      setAnalysisSnapshot(analysisResultToSnapshot(resultWithSource));
-      setAnalysisResult(resultWithSource);
-
-      if (progressCompleteRef.current) {
-        router.push('/results');
-      }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown API error occurred.';
-      console.error('Analysis API Error:', errorMessage, err);
-
-      const errorResult: AnalysisResult = {
-        id: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        status: 'failed',
-        matchScore: 0,
-        targetRole: 'Analysis Failed',
-        company: 'API Error',
-        overallFit: 'poor',
-        roleSeniority: 'mid',
-        keywordGaps: [],
-        bulletChanges: [],
-        rewriteSuggestions: [],
-        atsChecks: [],
-        riskFlags: [{ id: 'err', title: 'API Failure', description: errorMessage, severity: 'high' }],
-        recommendedEdits: [],
-      };
-
-      setAnalysisSnapshot(analysisResultToSnapshot(errorResult));
-      setAnalysisResult(errorResult);
-      setParsedPayload(null);
-
-      toast.error('Analysis failed', {
-        description: errorMessage || 'Please check the console for details.',
-      });
-      setIsAnalyzing(false);
-    }
-  }, [
-    jobDescription,
-    resumeData,
-    router,
-    setAnalysisSnapshot,
-    setParsedPayload,
-    setSourceInput,
-  ]);
-
-
-  const handleParseOnly = useCallback(async () => {
-    if (!resumeData) return;
-
-    setIsParsingOnly(true);
-
-    setSourceInput({
-      inputType: resumeData.type,
-      rawText: resumeData.content,
-      fileName: resumeData.fileName,
-      clearAnalysis: true,
-    });
-
-    try {
-      const parseResultResponse = await parseResume({
-        resumeText: resumeData.content,
-        inputType: resumeData.type,
-        fileName: resumeData.fileName,
-      });
-
-      setParsedPayload(parseResultResponse);
-
-      const parseOnlyResult: AnalysisResult = {
-        id: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-        matchScore: 0,
-        targetRole: 'Parsed Resume',
-        company: 'Parse-only mode',
-        overallFit: 'fair',
-        roleSeniority: 'mid',
-        keywordGaps: [],
-        bulletChanges: [],
-        rewriteSuggestions: [],
-        atsChecks: [],
-        riskFlags: [],
-        recommendedEdits: [],
-      };
-
-      setAnalysisSnapshot(analysisResultToSnapshot(parseOnlyResult));
-      router.push('/results');
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown parse error occurred.';
-      console.error('Parse API Error:', errorMessage, err);
-      toast.error('Parse failed', {
-        description: errorMessage || 'Please check the console for details.',
-      });
-    } finally {
-      setIsParsingOnly(false);
-    }
-  }, [resumeData, router, setAnalysisSnapshot, setParsedPayload, setSourceInput]);
-
-  const handleAnalysisComplete = useCallback(() => {
-    progressCompleteRef.current = true;
-
-    if (analysisResult) {
-      setIsAnalyzing(false);
-      router.push('/results');
-    }
-  }, [router, analysisResult]);
-
-  const handleReset = useCallback(() => {
-    setResumeData(null);
-    setJobDescription('');
-    resetWorkspace();
-  }, [resetWorkspace]);
+  const ctaHref = user ? '/analyze' : '/login';
+  const ctaLabel = user ? 'Go to Analyzer' : 'Get Started';
 
   return (
-    <div className="mx-auto flex w-full max-w-[1340px] flex-col gap-8">
-      <div>
-        <p className="text-[11px] font-semibold tracking-[0.08em] text-primary/75">
-          Resume Workspace
-        </p>
-        <h1 className="mt-2 font-serif text-[2.15rem] font-semibold leading-tight tracking-tight text-balance sm:text-[2.35rem]">
-          Analyze Resume
-        </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Paste your resume and a job description to get tailored rewrite suggestions.
-        </p>
-      </div>
+    <div className="bg-[linear-gradient(180deg,var(--secondary)_0%,var(--background)_35%,var(--background)_65%,var(--secondary)_80%)] text-foreground">
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="relative mx-auto max-w-4xl px-6 pb-20 pt-24 text-center sm:pt-32 sm:pb-28">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-4 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            AI-Powered Resume Optimization
+          </div>
+          <h1 className="font-serif text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl md:text-6xl">
+            Land your dream job with a{' '}
+            <span className="text-primary">perfectly tailored</span> resume
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Paste your resume and a job description. Our AI analyzes keyword gaps, ATS
+            compatibility, and generates tailored rewrite suggestions in seconds.
+          </p>
+          <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+            <Link href={ctaHref}>
+              <Button size="lg" className="gap-2 px-8 text-base">
+                <Zap className="h-4 w-4" />
+                {user ? 'Go to Analyzer' : 'Start Analyzing Free'}
+              </Button>
+            </Link>
+            <a href="#how-it-works">
+              <Button variant="outline" size="lg" className="gap-2 px-8 text-base">
+                See How It Works
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </a>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground/70">
+            100 free tokens on sign-up. No credit card required.
+          </p>
+        </div>
+      </section>
 
-      <div className="grid flex-1 gap-6 xl:grid-cols-2">
-        <ResumeInputCard onResumeChange={setResumeData} />
-        <JobDescriptionCard onJobDescriptionChange={setJobDescription} />
-      </div>
-
-      <div className="rounded-2xl border border-border/85 bg-card/90 p-4 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_8px_24px_rgba(15,23,42,0.03)] sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">Ready to run analysis</p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Ensure your resume and job description are complete for better scoring quality.
+      {/* Features Grid */}
+      <section>
+        <div className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+          <div className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary/75">
+              Features
+            </p>
+            <h2 className="mt-3 font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+              Everything you need to stand out
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              From keyword matching to ATS compliance, we cover every angle so your resume
+              gets past the filters and into human hands.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" onClick={handleReset} disabled={isBusy}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reset
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleParseOnly}
-              disabled={!canParseOnly || isBusy}
-            >
-              Parse Resume Only
-            </Button>
-            <Button
-              size="lg"
-              onClick={handleAnalyze}
-              disabled={!canAnalyze || isBusy}
-              className="gap-2"
-            >
-              <Zap className="h-4 w-4" />
-              Analyze Resume
-            </Button>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                icon: FileSearch,
+                title: 'Smart Parsing',
+                desc: 'Upload PDF, paste text, or import from LinkedIn. We extract and structure your resume automatically.',
+              },
+              {
+                icon: Target,
+                title: 'Keyword Gap Analysis',
+                desc: 'See exactly which skills and keywords the job requires that your resume is missing.',
+              },
+              {
+                icon: ShieldCheck,
+                title: 'ATS Compatibility',
+                desc: 'Get a compliance checklist to ensure your resume passes automated tracking systems.',
+              },
+              {
+                icon: Sparkles,
+                title: 'AI Rewrite Suggestions',
+                desc: 'Receive tailored bullet-point rewrites that incorporate missing keywords naturally.',
+              },
+            ].map((f) => (
+              <div
+                key={f.title}
+                className="group rounded-2xl border border-border/60 bg-card/80 p-6 transition-shadow hover:shadow-[0_4px_24px_rgba(15,23,42,0.06)]"
+              >
+                <div className="mb-4 inline-flex rounded-xl bg-secondary/80 p-3">
+                  <f.icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {f.desc}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {!canAnalyze && (resumeData || jobDescription) && (
-        <p className="text-sm text-muted-foreground/95">
-          {!resumeData
-            ? 'Please paste your resume'
-            : jobDescription.length < 50
-              ? 'Job description must be at least 50 characters (not required for Parse Resume Only)'
-              : null}
-        </p>
-      )}
+      {/* How It Works */}
+      <section id="how-it-works">
+        <div className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+          <div className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary/75">
+              How It Works
+            </p>
+            <h2 className="mt-3 font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+              Three steps to a better resume
+            </h2>
+          </div>
 
-      <AnalysisProgress open={isAnalyzing} onComplete={handleAnalysisComplete} />
+          <div className="mt-14 grid gap-8 sm:grid-cols-3">
+            {[
+              {
+                step: '01',
+                icon: Upload,
+                title: 'Upload Your Resume',
+                desc: 'Paste text, upload a PDF, or import from LinkedIn. We handle any format.',
+              },
+              {
+                step: '02',
+                icon: ScanSearch,
+                title: 'Add the Job Description',
+                desc: 'Paste the job listing you want to apply for. Our AI cross-references every requirement.',
+              },
+              {
+                step: '03',
+                icon: Download,
+                title: 'Get Your Tailored Resume',
+                desc: 'Review suggestions, accept rewrites, reorder sections, and export a polished PDF.',
+              },
+            ].map((s) => (
+              <div key={s.step} className="relative text-center">
+                <div className="mx-auto mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary/80">
+                  <s.icon className="h-6 w-6 text-primary" />
+                </div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/60">
+                  Step {s.step}
+                </p>
+                <h3 className="mt-1.5 text-base font-semibold text-foreground">
+                  {s.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {s.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section>
+        <div className="mx-auto max-w-4xl px-6 py-16 sm:py-20">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+            {[
+              { value: '95%', label: 'ATS Pass Rate' },
+              { value: '< 30s', label: 'Analysis Time' },
+              { value: '12+', label: 'Resume Formats' },
+              { value: '100', label: 'Free Tokens' },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <p className="font-serif text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+                  {stat.value}
+                </p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground sm:text-sm">
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section>
+        <div>
+          <div className="mx-auto max-w-3xl px-6 py-20 text-center sm:py-28">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+              Ready to tailor your resume?
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Sign up in seconds, get 100 free tokens, and start optimizing your resume
+              for your next application.
+            </p>
+            <div className="mt-8">
+              <Link href={ctaHref}>
+                <Button size="lg" className="gap-2 px-8 text-base">
+                  {ctaLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer>
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-8 sm:flex-row sm:justify-between">
+          <span className="font-serif text-sm font-medium text-muted-foreground">
+            ResumeTailor
+          </span>
+          <p className="text-xs text-muted-foreground/60">
+            &copy; {new Date().getFullYear()} ResumeTailor. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

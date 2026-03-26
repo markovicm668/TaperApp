@@ -6,8 +6,11 @@ require("./config/env");
 
 const analyzeRoute = require("./routes/analyze");
 const parseRoute = require("./routes/parse");
+const parsePdfRoute = require("./routes/parsePdf");
 const exportRoute = require("./routes/export");
+const userRoute = require("./routes/user");
 const requireAuth = require("./middleware/requireAuth");
+const requireTokens = require("./middleware/requireTokens");
 
 const app = express();
 
@@ -38,8 +41,10 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
-app.use("/analyze", requireAuth, analyzeRoute);
-app.use("/parse", requireAuth, parseRoute);
+app.use("/user/me", requireAuth, userRoute);
+app.use("/analyze", requireAuth, requireTokens(3), analyzeRoute);
+app.use("/parse", requireAuth, requireTokens(1), parseRoute);
+app.use("/parse-pdf", requireAuth, requireTokens(1), parsePdfRoute);
 app.use("/export", requireAuth, exportRoute);
 
 // 404
