@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
-const { parseResumePdf } = require("../services/geminiPdfParseService");
+const { PDFParse } = require("pdf-parse");
+const { parseResumeSections } = require("../services/geminiParseService");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -30,7 +31,12 @@ function handleMulterUpload(req, res, next) {
 }
 
 router.post("/", handleMulterUpload, async (req, res) => {
-  const startedAt = Date.now();
+  const sw = { _start: Date.now(), _steps: [] };
+  const lap = (label) => {
+    const now = Date.now();
+    const prev = sw._steps.length ? sw._steps[sw._steps.length - 1].at : sw._start;
+    sw._steps.push({ label, ms: now - prev, at: now });
+  };
 
   try {
     if (!req.file) {
@@ -42,20 +48,43 @@ router.post("/", handleMulterUpload, async (req, res) => {
       });
     }
 
-    const parseResult = await parseResumePdf({
-      pdfBuffer: req.file.buffer,
+    lap("upload");
+
+    // Extract text from PDF
+    let extractedText;
+    try {
+      const parser = new PDFParse({ data: req.file.buffer });
+      await parser.load();
+      const textResult = await parser.getText();
+      await parser.destroy();
+      await new Promise(resolve => setImmediate(resolve));
+      extractedText = textResult.text;
+    } catch (err) {
+      console.error(`-> [pdf-parse] FAILED:`, err.message);
+      const parseError = new Error("Failed to read PDF file. It may be corrupted or password-protected.");
+      parseError.code = "PARSE_FAILED";
+      throw parseError;
+    }
+
+    if (!extractedText || !extractedText.trim()) {
+      const err = new Error("Could not extract text from PDF. The file may be scanned/image-only.");
+      err.code = "PARSE_FAILED";
+      throw err;
+    }
+    lap("pdf-extract");
+
+    const parseResult = await parseResumeSections({
+      resumeText: extractedText,
+      inputType: "file",
       fileName: req.file.originalname,
     });
+    lap("gemini-parse");
 
-    // eslint-disable-next-line no-console
+    const total = Date.now() - sw._start;
     console.log(
-      JSON.stringify({
-        scope: "parse-pdf-route",
-        statusCode: 200,
-        source: parseResult.source,
-        attempts: parseResult.attempts,
-        latencyMs: Date.now() - startedAt,
-      })
+      `\n⏱  [parse-pdf] completed in ${total}ms\n` +
+      sw._steps.map((s) => `   ${s.label.padEnd(20)} ${String(s.ms).padStart(6)}ms`).join("\n") +
+      `\n   ${"TOTAL".padEnd(20)} ${String(total).padStart(6)}ms\n`
     );
 
     return res.status(200).json({
@@ -64,8 +93,8 @@ router.post("/", handleMulterUpload, async (req, res) => {
       tokensRemaining: req.tokensRemaining,
     });
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("-> Parse PDF Error:", error);
+    const total = Date.now() - sw._start;
+    console.error(`\n⏱  [parse-pdf] FAILED in ${total}ms: ${error.message}`);
 
     if (error.message === "Only PDF files are allowed.") {
       return res.status(400).json({

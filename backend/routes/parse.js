@@ -1,16 +1,21 @@
 const express = require("express");
 const { validateParseRequest } = require("../utils/validateRequest");
 const { parseResumeSections } = require("../services/geminiParseService");
-const { ExecutableCodeLanguage } = require("@google/generative-ai");
 
 function createParseRouter({ parseResume = parseResumeSections } = {}) {
   const router = express.Router();
 
   router.post("/", async (req, res) => {
-    const startedAt = Date.now();
+    const sw = { _start: Date.now(), _steps: [] };
+    const lap = (label) => {
+      const now = Date.now();
+      const prev = sw._steps.length ? sw._steps[sw._steps.length - 1].at : sw._start;
+      sw._steps.push({ label, ms: now - prev, at: now });
+    };
 
     try {
       const validation = validateParseRequest(req.body);
+      lap("validation");
       if (!validation.ok) {
         return res.status(400).json({
           error: {
@@ -22,21 +27,15 @@ function createParseRouter({ parseResume = parseResumeSections } = {}) {
       }
 
       const { resumeText, inputType, fileName } = validation.data;
+
       const parseResult = await parseResume({ resumeText, inputType, fileName });
+      lap("gemini-parse");
 
-      
-
-      ExecutableCodeLanguage
-
-      // eslint-disable-next-line no-console
+      const total = Date.now() - sw._start;
       console.log(
-        JSON.stringify({
-          scope: "parse-route",
-          statusCode: 200,
-          source: parseResult.source,
-          attempts: parseResult.attempts,
-          latencyMs: Date.now() - startedAt,
-        })
+        `\n⏱  [parse] completed in ${total}ms\n` +
+        sw._steps.map((s) => `   ${s.label.padEnd(20)} ${String(s.ms).padStart(6)}ms`).join("\n") +
+        `\n   ${"TOTAL".padEnd(20)} ${String(total).padStart(6)}ms\n`
       );
 
       return res.status(200).json({
@@ -45,8 +44,8 @@ function createParseRouter({ parseResume = parseResumeSections } = {}) {
         tokensRemaining: req.tokensRemaining,
       });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("-> Parse Error:", error);
+      const total = Date.now() - sw._start;
+      console.error(`\n⏱  [parse] FAILED in ${total}ms: ${error.message}`);
 
       const statusCode = error.code === "INVALID_INPUT" ? 400 : 500;
       const code = statusCode === 400 ? "INVALID_INPUT" : "PARSE_FAILED";

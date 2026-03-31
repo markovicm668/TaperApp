@@ -1,5 +1,5 @@
 const express = require("express");
-const { ensureUser } = require("../services/tokenService");
+const { ensureUser, addTokens } = require("../services/tokenService");
 const {
   lookupUserByReferralCode,
   recordReferral,
@@ -23,6 +23,15 @@ router.get("/", async (req, res, next) => {
       tokensRemaining: userData.tokensRemaining,
       referralCode: userData.referralCode,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/add-credits", async (req, res, next) => {
+  try {
+    const newBalance = await addTokens(req.auth.uid, 100);
+    res.json({ tokensRemaining: newBalance });
   } catch (err) {
     next(err);
   }

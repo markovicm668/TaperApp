@@ -1,5 +1,6 @@
 import type {
   AnalysisResult,
+  BulletChange,
   ResumeInput,
   JobDescription,
   ResumePdfPayload,
@@ -92,6 +93,48 @@ async function fetchWithAuth(
   }
 
   return res;
+}
+
+interface AiSkillChange {
+  id?: string;
+  type?: string;
+  original?: string;
+  improved?: string;
+  category?: string;
+}
+
+function normalizeSkillName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function convertSkillChangesToBulletChanges(skills: AiSkillChange[]): BulletChange[] {
+  return skills
+    .filter(s => s.type === 'added' || s.type === 'removed' || s.type === 'modified')
+    .filter(s => {
+      // Drop "modified" skills where original ≈ improved (Gemini returns all skills, even unchanged ones)
+      if (s.type === 'modified') {
+        const normOrig = normalizeSkillName(s.original ?? '');
+        const normImproved = normalizeSkillName(s.improved ?? '');
+        if (normOrig === normImproved) return false;
+      }
+      return true;
+    })
+    .map(s => {
+      const type = s.type as 'added' | 'removed' | 'modified';
+      let improved = s.improved ?? '';
+
+      // For additions, prefix with [Category] so downstream applyChangesToSkills can parse it
+      if (type === 'added' && s.category && improved) {
+        improved = `[${s.category}] ${improved}`;
+      }
+
+      return {
+        section: 'Skills',
+        original: s.original ?? '',
+        improved,
+        type,
+      };
+    });
 }
 
 const normalizeRewriteSection = (
@@ -233,6 +276,7 @@ export async function analyzeResume(
     company?: string;
     missingKeywords?: string[];
     rewrittenBullets?: Array<{ section?: string; type?: string; original?: string; improved?: string }>;
+    skills?: AiSkillChange[];
     rewriteSuggestions?: Array<{
       section?: string;
       originalText?: string;
@@ -243,6 +287,15 @@ export async function analyzeResume(
     suggestions?: string[];
     skillCategoryRenames?: Array<{ from?: string; to?: string }>;
   };
+
+  const experienceBulletChanges: BulletChange[] = (ai.rewrittenBullets || []).map(b => ({
+    section: normalizeBulletSection(b.section),
+    original: b.original ?? '',
+    improved: b.improved ?? '',
+    type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
+  }));
+
+  const skillBulletChanges = convertSkillChangesToBulletChanges(ai.skills || []);
 
   const result: AnalysisResult = {
     id: `analysis-${Date.now()}`,
@@ -263,12 +316,7 @@ export async function analyzeResume(
       category: 'Missing keyword',
     })),
 
-    bulletChanges: (ai.rewrittenBullets || []).map(b => ({
-      section: normalizeBulletSection(b.section),
-      original: b.original ?? '',
-      improved: b.improved ?? '',
-      type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
-    })),
+    bulletChanges: [...experienceBulletChanges, ...skillBulletChanges],
 
     skillCategoryRenames: (ai.skillCategoryRenames || [])
       .filter((r): r is { from: string; to: string } => Boolean(r.from && r.to))
@@ -338,6 +386,14 @@ export async function fetchUserProfile(
   return res.json();
 }
 
+export async function addCredits(): Promise<{ tokensRemaining: number }> {
+  const res = await fetchWithAuth('/user/me/add-credits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }, 'Failed to add credits');
+  return res.json();
+}
+
 export async function parseResumePdf(
   file: File
 ): Promise<AiParsedResumePayloadV2 & { tokensRemaining?: number }> {
@@ -357,107 +413,6 @@ export async function parseResumePdf(
   const parsed = json.data as AiParsedResumePayloadV2 & { tokensRemaining?: number };
   parsed.tokensRemaining = json.tokensRemaining;
   return parsed;
-}
-
-export async function analyzeResumePdf(
-  file: File,
-  jobDescription: string,
-  parsedResumeData?: AiParsedResumePayloadV2['resumeData']
-): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2; tokensRemaining?: number }> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('jobDescription', jobDescription);
-  if (parsedResumeData) {
-    formData.append('parsedResumeData', JSON.stringify(parsedResumeData));
-  }
-
-  const res = await fetchWithAuth('/analyze/pdf', {
-    method: 'POST',
-    body: formData,
-  }, 'PDF analyze failed');
-
-  const json = await res.json();
-
-  if (!json || !json.data) {
-    throw new Error("Invalid API response format: missing 'data' field.");
-  }
-
-  const ai = json.data as {
-    matchScore?: number;
-    roleSeniority?: AnalysisResult['roleSeniority'];
-    overallFit?: AnalysisResult['overallFit'];
-    targetRole?: string;
-    company?: string;
-    missingKeywords?: string[];
-    rewrittenBullets?: Array<{ section?: string; type?: string; original?: string; improved?: string }>;
-    rewriteSuggestions?: Array<{
-      section?: string;
-      originalText?: string;
-      improvedText?: string;
-      rationale?: string;
-    }>;
-    atsWarnings?: string[];
-    suggestions?: string[];
-    skillCategoryRenames?: Array<{ from?: string; to?: string }>;
-  };
-
-  const result: AnalysisResult = {
-    id: `analysis-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-
-    matchScore: ai.matchScore ?? 0,
-    roleSeniority: ai.roleSeniority ?? 'mid',
-    overallFit: ai.overallFit ?? 'good',
-
-    targetRole: ai.targetRole || 'Unknown Role',
-    company: ai.company || 'Unknown Company',
-    status: 'completed',
-
-    keywordGaps: (ai.missingKeywords || []).map((kw: string) => ({
-      keyword: kw,
-      importance: 'medium',
-      suggestedPhrases: [],
-      category: 'Missing keyword',
-    })),
-
-    bulletChanges: (ai.rewrittenBullets || []).map(b => ({
-      section: normalizeBulletSection(b.section),
-      original: b.original ?? '',
-      improved: b.improved ?? '',
-      type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
-    })),
-
-    skillCategoryRenames: (ai.skillCategoryRenames || [])
-      .filter((r): r is { from: string; to: string } => Boolean(r.from && r.to))
-      .map(r => ({ from: r.from!, to: r.to! })),
-
-    rewriteSuggestions: (ai.rewriteSuggestions || []).map((s, i: number) => ({
-      id: `rw-${i}`,
-      section: normalizeRewriteSection(s.section),
-      originalText: s.originalText ?? '',
-      improvedText: s.improvedText ?? '',
-      rationale: s.rationale ?? '',
-      atsNotes: '',
-    })),
-
-    atsChecks: (ai.atsWarnings || []).map((w: string, i: number) => ({
-      id: `ats-${i}`,
-      name: 'ATS Warning',
-      status: 'warning',
-      message: w,
-      tip: 'Consider revising this section',
-    })),
-
-    riskFlags: [],
-
-    recommendedEdits: (ai.suggestions || []).map((s: string, i: number) => ({
-      id: `re-${i}`,
-      text: s,
-      completed: false,
-    })),
-  };
-
-  return { result, parsed: json.parsed as AiParsedResumePayloadV2, tokensRemaining: json.tokensRemaining };
 }
 
 export async function exportResumePdf(resume: ResumePdfPayload): Promise<Blob> {

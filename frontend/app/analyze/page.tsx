@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
 import { AnalysisProgress } from '@/components/analysis-progress';
-import { analyzeResume, parseResume, parseResumePdf, analyzeResumePdf } from '@/lib/api';
+import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
@@ -81,10 +81,8 @@ export default function AnalyzePage() {
 
       // Step 2: Run full analysis (costs 3 tokens).
       // Pass the already-parsed resumeData so the backend skips re-parsing.
-      const { result, parsed, tokensRemaining } = resumeData.file
-        ? await analyzeResumePdf(resumeData.file, jobDescription, parseResult.resumeData)
-        : await analyzeResume(
-            { type: resumeData.type, content: resumeData.content, fileName: resumeData.fileName },
+      const { result, parsed, tokensRemaining } = await analyzeResume(
+            { type: resumeData.type, content: resumeData.file ? '' : resumeData.content, fileName: resumeData.fileName },
             { text: jobDescription },
             parseResult.resumeData
           );

@@ -1,7 +1,9 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { getEnv } = require("../config/env");
+const { parseModelJson } = require("./geminiParseService");
 
 const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
+const GEMINI_TIMEOUT_MS = 60_000;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 function serializeParsedResume(resumeData) {
@@ -145,7 +147,10 @@ function serializeParsedResume(resumeData) {
 
 async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
   });
 
   const resumeForPrompt = parsedResumeData
@@ -170,15 +175,23 @@ Return STRICT JSON ONLY with this schema:
   "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
   "rewrittenBullets": [
     {
-      "section": "experience" | "projects" | "skills",
+      "section": "experience" | "projects",
       "type": "modified" | "added" | "removed",
       "original": string,
       "improved": string,
-      "rationale": string
     }
   ],
   "skillCategoryRenames": [
     { "from": "exact current category name", "to": "new category name" }
+  ],
+  "skills": [
+    {
+      "id": "string",
+      "type": "added" | "removed" | "modified",
+      "original": string,
+      "improved": string,
+      "category": "string",
+    }
   ]
 }
 
@@ -189,6 +202,7 @@ Rules:
 - Ensure matchScore is an integer
 - Infer targetRole and company from the JOB DESCRIPTION (or use empty string if unknown)
 - "section" must be one of: experience, projects, skills
+- In skills section, write all skills from the resume as well as any new skills you suggest adding based on the JOB DESCRIPTION. For skills you suggest adding that are not in the original resume, set "original" to an empty string and "type" to "added". For skills you suggest removing that are in the original resume, set "improved" to an empty string and "type" to "removed". For skills that are in the original resume but you suggest modifying (e.g. changing the name to better match the JOB DESCRIPTION), set "type" to "modified" and provide the new name in "improved".
 
 EXPERIENCE bullets (section: "experience" or "projects"):
 - For each bullet, provide one improved version that is action-led and aligned to the JOB DESCRIPTION
@@ -198,10 +212,9 @@ EXPERIENCE bullets (section: "experience" or "projects"):
 - type must be "modified"
 
 SKILLS (section: "skills"):
-- Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume (type: "added", original: "", improved: "[CategoryName] skill name" — prefix with the target category in square brackets). IMPORTANT: the CategoryName MUST be one of the exact category names already present in the resume (e.g. if the resume has "Soft", use "[Soft]" not "[Soft Skills]"). Only create a new category name if no existing category is a reasonable fit.
-- Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")
+- Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume
+- Feel free to to change any skill and any category name to be more aligned with the JOB DESCRIPTION
 - Remove skills that are clearly not relevant to the JOB DESCRIPTION (type: "removed", original: "SkillName", improved: "")
-- Do not add or remove more than 5 skills in total
 - For category renames, only rename if it improves alignment with the JOB DESCRIPTION
 - Try to keep the same number of skills in each category unless the JOB DESCRIPTION indicates a clear need for more or fewer skills in that category
 - Try not to have less than 2 skills in a category
@@ -215,13 +228,42 @@ SKILLS (section: "skills"):
   });
 
   const analyzeStart = Date.now();
-  const result = await model.generateContent(prompt);
-  console.log(`-> Gemini analysis call took ${Date.now() - analyzeStart}ms`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  let result;
+  try {
+    result = await model.generateContent(prompt, {
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      const timeoutError = new Error(`Gemini API timed out after ${GEMINI_TIMEOUT_MS / 1000}s`);
+      timeoutError.code = "GEMINI_TIMEOUT";
+      throw timeoutError;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  // console.log(`-> Gemini analysis call took ${Date.now() - analyzeStart}ms`);
 
   const outputText = result.response.text();
+  console.log("-> Gemini raw output:\n", outputText);
 
   try {
-    const parsed = JSON.parse(outputText);
+    const parsed = parseModelJson(outputText);
+
+    // console.log("-> Gemini analysis output:", JSON.stringify({
+    //   matchScore: parsed.matchScore,
+    //   overallFit: parsed.overallFit,
+    //   targetRole: parsed.targetRole,
+    //   company: parsed.company,
+    //   roleSeniority: parsed.roleSeniority,
+    //   skillCategoryRenames: parsed.skillCategoryRenames,
+    //   skills: parsed.skills,
+    //   rewrittenBullets: parsed.rewrittenBullets,
+    // }, null, 2));
+
     return parsed;
   } catch (e) {
     console.error("-> JSON Parsing Failed in service. Raw AI Output:", outputText.slice(0, 500) + '...');

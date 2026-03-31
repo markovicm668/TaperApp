@@ -70,7 +70,30 @@ async function deductTokens(uid, cost) {
   });
 }
 
+async function addTokens(uid, amount) {
+  const db = getFirebaseFirestore();
+  const userRef = getUserRef(uid);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists) {
+      const newBalance = INITIAL_TOKENS + amount;
+      tx.set(userRef, {
+        tokensRemaining: newBalance,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      return newBalance;
+    }
+
+    const data = snap.data();
+    const newBalance = data.tokensRemaining + amount;
+    tx.update(userRef, { tokensRemaining: newBalance });
+    return newBalance;
+  });
+}
+
 module.exports = {
   ensureUser,
   deductTokens,
+  addTokens,
 };

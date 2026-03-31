@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, BarChart3, Copy, FileSearch, HelpCircle, History, Settings } from 'lucide-react';
+import { ArrowRight, BarChart3, Copy, FileSearch, HelpCircle, History, Plus, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import { addCredits } from '@/lib/api';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { cn } from '@/lib/utils';
@@ -43,7 +44,7 @@ export function AppNavbar({
   const hasResults = useHasResults();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { signOut } = useAuth();
-  const { referralCode } = useTokens();
+  const { referralCode, setTokensRemaining } = useTokens();
 
   const isActivePath = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -150,9 +151,26 @@ export function AppNavbar({
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <>
-                <div className="flex h-8 items-center rounded-lg border border-border/70 bg-muted/50 px-2.5 text-xs font-semibold tabular-nums text-foreground">
+                <div className="flex h-8 items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2.5 text-xs font-semibold tabular-nums text-foreground">
                   {creditsRemaining}
-                  <span className="ml-1 font-normal text-muted-foreground">credits</span>
+                  <span className="ml-0.5 font-normal text-muted-foreground">credits</span>
+                  {process.env.NODE_ENV === 'development' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { tokensRemaining: newBalance } = await addCredits();
+                          setTokensRemaining(newBalance);
+                          toast.success(`Added 100 credits (${newBalance} total)`);
+                        } catch {
+                          toast.error('Failed to add credits');
+                        }
+                      }}
+                      className="ml-1 flex h-5 w-5 items-center justify-center rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                      title="DEV: Add 100 credits"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
 
                 {referralCode && (

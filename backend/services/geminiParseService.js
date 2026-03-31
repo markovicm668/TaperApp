@@ -3,18 +3,9 @@ const { getEnv } = require("../config/env");
 const { validateParsedPayload } = require("./aiContracts");
 const { buildParsedPayload, normalizeStringArray } = require("./parseMappers");
 
-const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-3-flash-preview";
+const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-2.5-flash";
 const MAX_GEMINI_ATTEMPTS = 2;
-const GEMINI_TIMEOUT_MS = 60_000;
-
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Gemini API timed out after ${ms / 1000}s`)), ms)
-    ),
-  ]);
-}
+const GEMINI_TIMEOUT_MS = 120_000;
 
 function createGeminiGenerateContent({ modelName = DEFAULT_MODEL } = {}) {
   const geminiClient = new GoogleGenerativeAI(getEnv("GEMINI_API_KEY"));
@@ -22,15 +13,26 @@ function createGeminiGenerateContent({ modelName = DEFAULT_MODEL } = {}) {
     model: modelName,
     generationConfig: {
       temperature: 0.1,
+      responseMimeType: "application/json",
     },
   });
 
   return async (prompt) => {
-    const result = await withTimeout(
-      model.generateContent(prompt),
-      GEMINI_TIMEOUT_MS
-    );
-    return result.response.text();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    try {
+      const result = await model.generateContent(prompt, {
+        signal: controller.signal,
+      });
+      return result.response.text();
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(`Gemini API timed out after ${GEMINI_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 }
 
@@ -50,7 +52,12 @@ function extractJsonText(text) {
   if (start === -1 || end === -1 || end <= start) {
     throw new Error("Model response does not contain JSON object boundaries.");
   }
-  return cleaned.slice(start, end + 1);
+  const raw = cleaned.slice(start, end + 1);
+  // Escape raw control characters that break JSON.parse (common in Gemini JSON mode)
+  return raw.replace(/[\x00-\x1f]/g, (ch) => {
+    const esc = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+    return esc[ch] || '';
+  });
 }
 
 function buildPrompt({ resumeText, inputType, fileName, repairReason }) {
@@ -204,6 +211,26 @@ Resume text:
 ${resumeText}`;
 }
 
+function parseModelJson(text) {
+  const cleaned = String(text || "").trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (directError) {
+    try {
+      const extracted = extractJsonText(cleaned);
+      return JSON.parse(extracted);
+    } catch (extractError) {
+      throw new Error(
+        `Failed to parse Gemini JSON.\n` +
+        `Direct parse error: ${directError.message}\n` +
+        `Extract parse error: ${extractError.message}\n` +
+        `Raw output preview: ${cleaned.slice(0, 500)}`
+      );
+    }
+  }
+}
+
 function normalizeInputText(text) {
   return String(text || "")
     .replace(/\r\n?/g, "\n")
@@ -219,7 +246,8 @@ function mapModelOutputToPayload({
   fileName,
   serviceNotes,
 }) {
-  const modelPayload = JSON.parse(extractJsonText(modelOutput));
+  // const modelPayload = JSON.parse(extractJsonText(modelOutput));
+  const modelPayload = parseModelJson(modelOutput);
   const modelSections = [
     ...(Array.isArray(modelPayload && modelPayload.sections) ? modelPayload.sections : []),
     ...(Array.isArray(modelPayload && modelPayload.customSections)
@@ -228,16 +256,16 @@ function mapModelOutputToPayload({
   ];
   const modelResume =
     modelPayload &&
-    typeof modelPayload === "object" &&
-    !Array.isArray(modelPayload) &&
-    modelPayload.resumeData &&
-    typeof modelPayload.resumeData === "object"
+      typeof modelPayload === "object" &&
+      !Array.isArray(modelPayload) &&
+      modelPayload.resumeData &&
+      typeof modelPayload.resumeData === "object"
       ? modelPayload.resumeData
       : modelPayload &&
-          typeof modelPayload === "object" &&
-          !Array.isArray(modelPayload) &&
-          modelPayload.resume &&
-          typeof modelPayload.resume === "object"
+        typeof modelPayload === "object" &&
+        !Array.isArray(modelPayload) &&
+        modelPayload.resume &&
+        typeof modelPayload.resume === "object"
         ? modelPayload.resume
         : modelPayload;
 
@@ -266,7 +294,8 @@ async function parseResumeSections(
   const serviceNotes = [];
   let attempt = 0;
   let lastError = null;
-  let geminiGenerateContent = options.geminiGenerateContent;
+  const geminiGenerateContent =
+    options.geminiGenerateContent || createGeminiGenerateContent();
 
   for (attempt = 1; attempt <= MAX_GEMINI_ATTEMPTS; attempt += 1) {
     try {
@@ -278,7 +307,9 @@ async function parseResumeSections(
         resumeText: normalizedText,
         inputType,
         fileName,
-        repairReason: lastError ? lastError.message : undefined,
+        repairReason: lastError && !lastError.message?.includes("timed out")
+          ? lastError.message
+          : undefined,
       });
 
       const startedAt = Date.now();
@@ -286,7 +317,7 @@ async function parseResumeSections(
       const elapsed = Date.now() - startedAt;
 
       // eslint-disable-next-line no-console
-      console.log("-> Gemini parse raw output:\n", modelOutput);
+      // console.log("-> Gemini parse raw output:\n", modelOutput);
 
       const payload = mapModelOutputToPayload({
         modelOutput,
@@ -302,15 +333,15 @@ async function parseResumeSections(
       }
 
       // eslint-disable-next-line no-console
-      console.log(
-        JSON.stringify({
-          scope: "parse",
-          source: "gemini",
-          attempts: attempt,
-          latencyMs: elapsed,
-          responseChars: String(modelOutput || "").length,
-        })
-      );
+      // console.log(
+      //   JSON.stringify({
+      //     scope: "parse",
+      //     source: "gemini",
+      //     attempts: attempt,
+      //     latencyMs: elapsed,
+      //     responseChars: String(modelOutput || "").length,
+      //   })
+      // );
 
       return {
         payload: validated.data,
@@ -345,4 +376,5 @@ module.exports = {
   extractJsonText,
   stripMarkdownFences,
   createGeminiGenerateContent,
+  parseModelJson,
 };
