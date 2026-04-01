@@ -154,7 +154,7 @@ export function AppNavbar({
                 <div className="flex h-8 items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2.5 text-xs font-semibold tabular-nums text-foreground">
                   {creditsRemaining}
                   <span className="ml-0.5 font-normal text-muted-foreground">credits</span>
-                  {process.env.NODE_ENV === 'development' && (
+                  {process.env.NEXT_PUBLIC_ENABLE_ADD_CREDITS === 'true' && (
                     <button
                       onClick={async () => {
                         try {
