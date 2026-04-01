@@ -8,6 +8,7 @@ import type {
 import type { AiParsedResumePayloadV2 } from '@resume-scanner/resume-contract';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+console.log('[api] API_BASE_URL:', API_BASE_URL);
 
 interface GetTokenOptions {
   forceRefresh?: boolean;
@@ -59,6 +60,7 @@ async function fetchWithAuth(
     const headers = new Headers(init.headers || {});
     headers.set('Authorization', `Bearer ${token}`);
 
+    console.log('[api] fetching:', `${API_BASE_URL}${path}`);
     return fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers,
