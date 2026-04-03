@@ -89,7 +89,7 @@ export function AppNavbar({
             className="flex items-center gap-2 text-foreground transition-opacity hover:opacity-80"
           >
             <span className="font-serif text-lg font-semibold tracking-tight">
-              ResumeTailor
+              Tailor
             </span>
           </Link>
 
