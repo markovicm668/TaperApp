@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Zap, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { AdminOnly } from '@/components/admin-only';
 import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
@@ -11,6 +12,7 @@ import { AnalysisProgress } from '@/components/analysis-progress';
 import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
+import { useAdmin } from '@/lib/auth/useAdmin';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
@@ -24,6 +26,7 @@ export default function AnalyzePage() {
   } =
     useResumeActions();
   const { setTokensRemaining } = useTokens();
+  const { isAdmin } = useAdmin();
 
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
   const [jobDescription, setJobDescription] = useState('');
@@ -267,13 +270,15 @@ export default function AnalyzePage() {
               <RotateCcw className="mr-2 h-4 w-4" />
               Reset
             </Button>
-            <Button
-              variant="secondary"
-              onClick={handleParseOnly}
-              disabled={!canParseOnly || isBusy}
-            >
-              Parse Resume Only
-            </Button>
+            <AdminOnly>
+              <Button
+                variant="secondary"
+                onClick={handleParseOnly}
+                disabled={!canParseOnly || isBusy}
+              >
+                Parse Resume Only
+              </Button>
+            </AdminOnly>
             <Button
               size="lg"
               onClick={handleAnalyze}
@@ -292,7 +297,7 @@ export default function AnalyzePage() {
           {!resumeData
             ? 'Please paste your resume'
             : jobDescription.length < 50
-              ? 'Job description must be at least 50 characters (not required for Parse Resume Only)'
+              ? `Job description must be at least 50 characters${isAdmin ? ' (not required for Parse Resume Only)' : ''}`
               : null}
         </p>
       )}

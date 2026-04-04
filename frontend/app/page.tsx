@@ -43,8 +43,8 @@ export default function LandingPage() {
             <span className="text-primary">perfectly tailored</span> resume
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Paste your resume and a job description. Our AI analyzes keyword gaps, ATS
-            compatibility, and generates tailored rewrite suggestions in seconds.
+            Upload or paste resume and a job description. Our AI analyzes keyword gaps, ATS
+            compatibility, and generates tailored rewrite suggestions.
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link href={ctaHref}>
@@ -87,7 +87,7 @@ export default function LandingPage() {
               {
                 icon: FileSearch,
                 title: 'Smart Parsing',
-                desc: 'Upload PDF, paste text, or import from LinkedIn. We extract and structure your resume automatically.',
+                desc: 'Upload PDF or paste text. We extract and structure your resume automatically.',
               },
               {
                 icon: Target,
@@ -140,7 +140,7 @@ export default function LandingPage() {
                 step: '01',
                 icon: Upload,
                 title: 'Upload Your Resume',
-                desc: 'Paste text, upload a PDF, or import from LinkedIn. We handle any format.',
+                desc: 'Paste text or upload a PDF. We handle any format.',
               },
               {
                 step: '02',
@@ -177,11 +177,11 @@ export default function LandingPage() {
       {/* Stats */}
       <section>
         <div className="mx-auto max-w-4xl px-6 py-16 sm:py-20">
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {[
               { value: '95%', label: 'ATS Pass Rate' },
-              { value: '< 30s', label: 'Analysis Time' },
-              { value: '12+', label: 'Resume Formats' },
+              { value: '< 50s', label: 'Analysis Time' },
+              // { value: '12+', label: 'Resume Formats' },
               { value: '100', label: 'Free Tokens' },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
@@ -224,10 +224,10 @@ export default function LandingPage() {
       <footer>
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-8 sm:flex-row sm:justify-between">
           <span className="font-serif text-sm font-medium text-muted-foreground">
-            ResumeTailor
+            Tailor
           </span>
           <p className="text-xs text-muted-foreground/60">
-            &copy; {new Date().getFullYear()} ResumeTailor. All rights reserved.
+            &copy; {new Date().getFullYear()} Tailor. All rights reserved.
           </p>
         </div>
       </footer>
