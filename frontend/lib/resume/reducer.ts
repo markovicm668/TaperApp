@@ -121,6 +121,19 @@ export function resumeReducer(
         ? applyBulletChangesToResumeData(state.workspace.resumeData, nextBulletChanges, 'ai', snapshot.skillCategoryRenames)
         : state.workspace.resumeData;
 
+      // Replace the resume title with the analysis target role
+      const targetRole = snapshot?.targetRole;
+      const updatedResumeData =
+        targetRole && snapshot?.status !== 'failed'
+          ? {
+              ...appliedResumeData,
+              basics: {
+                ...appliedResumeData.basics,
+                title: targetRole,
+              },
+            }
+          : appliedResumeData;
+
       // Strip [Category] bracket prefix from skill additions so diff-view shows clean text
       const cleanedBulletChanges = nextBulletChanges.map(bc =>
         bc.section?.toLowerCase() === 'skills' && bc.type === 'added' && /^\[[^\]]+\]\s+/.test(bc.improved)
@@ -132,7 +145,7 @@ export function resumeReducer(
         ...state,
         workspace: withUpdatedTimestamp({
           ...state.workspace,
-          resumeData: appliedResumeData,
+          resumeData: updatedResumeData,
           analysis: {
             ...state.workspace.analysis,
             resultId: snapshot?.id || null,

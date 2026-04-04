@@ -196,55 +196,40 @@ You will be joining the Academia & Government segment—an energetic and mission
 
 `;
 
-export const sampleResume = `
-Marko Markovic
-markovicm668@gmail.com | +381654071575 | Belgrade, Serbia |
-linkedin.com/in/markomarkovic6 | github.com/markovicm668
-Education
-Faculty of Organizational Sciences, University of Belgrade 2021 – 2025
-Information Systems and Technologies Serbia
-Valjevska Gimnazija
-Science and Mathematics
-Professional Experience
-Project Coordinator, FD Organization 09/2023 – 05/2024
-Belgrade, Serbia
-– Led 2 cross-functional teams to deliver internal web platform used by 100+ students
-– Owned product vision and roadmap, converting 50+ user stories into deliverables with engineering and design
-– Ensured weekly delivery by removing blockers and aligning engineering, design, and stakeholder expectations
-– Prioritized product backlog in ClickUp, balancing stakeholder goals and development velocity
-Working Student in Office and Travel Management, Netconomy 09/2023 – Present
-Belgrade, Serbia
-– Negotiated corporate hotel rates, saving $2000 annually
-– Processed 30+ expense reports monthly with 100% accuracy
-– Managed travel requests and approvals using ServiceNow, working daily with request workflows and fulfiller/agent
-interfaces
-– Implemented wellness initiatives boosting staff well-being
-Personal Projects
-Loyalty Stamp Card App | React Native, Node.js, MongoDB 05/2025 – 08/2025
-– Conducted 10+ customer interviews to validate product-market fit and adjusted MVP scope
-– Designed digital loyalty system for local cafes to issue and track stamps
-– Built QR-code scanning flow for in-app reward redemption
-Coffee-to-Go Ordering App | React Native, Node.js, MongoDB 11/2024 – 04/2025
-– Built cross-platform mobile app to pre-order coffee and skip queues
-– Defined and shipped real-time notifications feature, improving order visibility and reducing wait-time uncertainty
-for testers
-– Handled 100+ test orders during testing with custom backend services
-Instagram Theme Pages Business – Grew two niche pages to 10K+ followers each in 2 years
-– Collaborated with 15+ influencers to boost engagement by 25%
-– Generated $1500 through sponsorships and product sales
-05/2016 – 02/2021
-Achievements
-1st place, Unija Case Challenge (international) — Cryptocurrency taxation strategy
-3rd place, Renovation Case Challenge (SC Usce) — Loyalty system implementation concept
-Skills
-Technical: Node.js, Express.js, MongoDB, React Native, Git
-Product management: User-story writing, Backlog grooming, Wireframing (Figma)
-Soft: Cross-functional coordination, Agile ceremonies, Stakeholder communication
-PM Tools: ServiceNow, JIRA, Confluence, ClickUp, Notion
-Analytics: Google Analytics, Excel, SQL, R (programming language)
-Languages
-Serbian (native), English (fluent), German (basic)
-`;
+export const sampleResume = `LAURA MENDES
+laura.mendes@email.com | +44 7891 234 567 | linkedin.com/in/lauramendes | London, UK
+
+PROFILE
+Results-oriented sales professional with 2.5 years of experience in digital sales environments, combining outbound prospecting with customer success support for SaaS clients. Comfortable managing multi-channel prospect engagement and CRM workflows. Strong communicator with a track record of collaborating across sales teams to advance pipeline and deliver a positive customer experience.
+
+EXPERIENCE
+Sales Development Representative
+Datapath Analytics — London, UK (Remote) | Mar 2023 – Present
+
+Conduct outbound email sequences and follow-up calls to generate qualified leads for the Account Executive team, averaging 55+ prospect touchpoints per week
+Qualify inbound and outbound leads against ICP criteria and hand off high-fit prospects with structured context notes via HubSpot CRM
+Collaborate with AEs to schedule discovery calls, helping reduce pipeline stall rate by ~18% over two quarters
+Maintain accurate prospect and account records in CRM to support pipeline forecasting
+Participate in weekly product enablement sessions to sharpen messaging for different buyer personas
+
+Customer Success & Sales Support Associate
+Orbis Digital — Lisbon, Portugal | Sep 2021 – Feb 2023
+
+Managed a portfolio of 30+ SMB clients on a digital marketing SaaS platform, supporting onboarding, adoption, and renewal
+Assisted the sales team with prospect research, outreach drafts, and demo scheduling
+Responded to inbound inquiries via email and chat, qualifying interest and routing to the appropriate sales contact
+Logged all customer interactions in Zoho CRM, flagging upsell opportunities for the sales team
+
+
+EDUCATION
+BA in Business Communication
+University of Coimbra, Portugal | Graduated 2021
+
+SKILLS & TOOLS
+
+CRM: HubSpot, Zoho CRM (familiar with Salesforce basics)
+Outreach: Email sequencing, cold calling, LinkedIn Sales Navigator
+Languages: English (C1), Portuguese (native), Spanish (conversational)`;
 
 // API Functions
 export async function analyzeResume(

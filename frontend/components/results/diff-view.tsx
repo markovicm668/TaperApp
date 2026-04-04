@@ -28,6 +28,7 @@ import {
   resumeInlineEditTargetKey,
   type ResumeInlineEditTarget,
 } from '@/lib/resume/inline-edits';
+import { useTargetRole } from '@/lib/resume/selectors';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -528,6 +529,7 @@ export function DiffView({
   onPdfToggleSection,
   onPdfToggleItem,
 }: DiffViewProps) {
+  const targetRole = useTargetRole();
   const [localChanges, setLocalChanges] = useState<BulletChange[]>(changes);
   const [activeEdit, setActiveEdit] = useState<ActiveEditState | null>(null);
   const [draftText, setDraftText] = useState('');
@@ -1223,17 +1225,24 @@ export function DiffView({
         const isTitle = item.kind === 'title';
         const isIdentityRow = isName || isTitle;
 
+        const isTitleUpdatedByAi = isTitle && !!targetRole && item.label === targetRole;
         const textClassName = isName
           ? 'text-[1.05rem] font-semibold leading-tight text-foreground sm:text-xl'
           : isTitle
-            ? 'text-sm font-medium leading-relaxed text-foreground/85 sm:text-base'
+            ? cn(
+                'text-sm font-medium leading-relaxed sm:text-base',
+                isTitleUpdatedByAi ? 'text-success' : 'text-foreground/85'
+              )
             : 'text-sm leading-relaxed text-foreground break-words';
 
         return (
           <div
             key={item.itemKey}
             className={cn(
-              'rounded-lg border border-border/75 bg-background/70 p-3',
+              'rounded-lg border p-3',
+              isTitleUpdatedByAi
+                ? 'border-success/30 bg-success/[0.05]'
+                : 'border-border/75 bg-background/70',
               isIdentityRow && 'sm:col-span-2',
               state === 'unchecked' && 'opacity-55'
             )}
@@ -1350,9 +1359,21 @@ export function DiffView({
                 )}
             {block.titleRow
               ? renderHeaderTextRow(block.titleRow, {
-                  textClassName: 'text-sm font-medium text-foreground/85',
+                  textClassName: cn(
+                    'text-sm font-medium',
+                    targetRole && block.titleRow.text === targetRole
+                      ? 'text-success'
+                      : 'text-foreground/85'
+                  ),
                 })
-              : block.title && <p className="text-sm font-medium text-foreground/85">{block.title}</p>}
+              : block.title && (
+                  <p className={cn(
+                    'text-sm font-medium',
+                    targetRole && block.title === targetRole
+                      ? 'text-success'
+                      : 'text-foreground/85'
+                  )}>{block.title}</p>
+                )}
             {block.detailRows.length > 0 ? (
               <div className="space-y-1">
                 {block.detailRows.map(row =>

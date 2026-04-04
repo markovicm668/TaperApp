@@ -30,8 +30,8 @@ interface AppNavbarProps {
 const navItems = [
   { href: '/analyze', label: 'Analyze', icon: FileSearch },
   { href: '/results', label: 'Results', icon: BarChart3, requiresResults: true },
-  { href: '/history', label: 'History', icon: History },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  // { href: '/history', label: 'History', icon: History },
+  // { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/help', label: 'Help', icon: HelpCircle },
 ];
 

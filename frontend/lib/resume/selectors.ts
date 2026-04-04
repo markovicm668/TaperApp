@@ -140,3 +140,10 @@ export function useEffectiveSectionViewModel(): SectionViewModelRow[] {
 export function useExportPayload(): ResumePdfPayload | null {
   return useResumeSelector(selectCanonicalExportPayload);
 }
+
+export const selectTargetRole = (state: ResumeStoreState): string | null =>
+  state.workspace.analysis.lastAnalysisResult?.targetRole || null;
+
+export function useTargetRole(): string | null {
+  return useResumeSelector(selectTargetRole);
+}

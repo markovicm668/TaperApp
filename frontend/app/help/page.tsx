@@ -42,7 +42,7 @@ export default function HelpPage() {
       <div className="mt-10 border-t border-border pt-4">
         <h2 className="text-xl font-semibold">Need more help?</h2>
         <p className="mt-2 text-muted-foreground">
-          If you can&apos;t find an answer here, please contact support at support@resumetailor.com.
+          If you can&apos;t find an answer here, please contact support at marko@trytailor.cv.
         </p>
       </div>
     </div>
