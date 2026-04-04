@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useHasResults } from '@/lib/resume/selectors';
+import { AdminOnly } from './admin-only';
 
 interface AppNavbarProps {
   userName?: string;
@@ -154,6 +155,7 @@ export function AppNavbar({
                 <div className="flex h-8 items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2.5 text-xs font-semibold tabular-nums text-foreground">
                   {creditsRemaining}
                   <span className="ml-0.5 font-normal text-muted-foreground">credits</span>
+                  <AdminOnly>
                   {process.env.NEXT_PUBLIC_ENABLE_ADD_CREDITS === 'true' && (
                     <button
                       onClick={async () => {
@@ -171,6 +173,7 @@ export function AppNavbar({
                       <Plus className="h-3 w-3" />
                     </button>
                   )}
+                  </AdminOnly>
                 </div>
 
                 {referralCode && (

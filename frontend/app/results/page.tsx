@@ -27,6 +27,7 @@ import {
   togglePdfSelectionSection,
   type PdfSelectionOverrides,
 } from '@/lib/resume/pdf-selection';
+import { AdminOnly } from '@/components/admin-only';
 
 const PDF_SELECTION_STORAGE_KEY = 'resumePdfSelection.v1';
 
@@ -279,13 +280,15 @@ export default function ResultsPage() {
             >
               {isExporting ? 'Preparing...' : 'Download PDF'}
             </Button>
-            <Button
-              variant="quiet"
-              onClick={handleCopyJson}
-              disabled={isCopyingJson || !canonicalParsePayload}
-            >
-              {isCopyingJson ? 'Copying...' : 'Copy JSON'}
-            </Button>
+            <AdminOnly>
+              <Button
+                variant="quiet"
+                onClick={handleCopyJson}
+                disabled={isCopyingJson || !canonicalParsePayload}
+              >
+                {isCopyingJson ? 'Copying...' : 'Copy JSON'}
+              </Button>
+            </AdminOnly>
             <Button variant="outline" onClick={handleReset}>
               <RotateCcw className="mr-2 h-4 w-4" />
               New Analysis
