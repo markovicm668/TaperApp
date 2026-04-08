@@ -151,7 +151,10 @@ export default function ResultsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'resume.pdf';
+      const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
+      const titleSlug = (targetRole || '').replace(/\s+/g, '_');
+      const fileName = titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`;
+      link.download = fileName.replace(/[\/\\:*?"<>|]/g, '_');
       document.body.appendChild(link);
       link.click();
       link.remove();

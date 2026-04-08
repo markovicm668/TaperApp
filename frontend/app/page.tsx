@@ -226,9 +226,17 @@ export default function LandingPage() {
           <span className="font-serif text-sm font-medium text-muted-foreground">
             Tailor
           </span>
-          <p className="text-xs text-muted-foreground/60">
-            &copy; {new Date().getFullYear()} Tailor. All rights reserved.
-          </p>
+          <div className="flex items-center gap-4">
+            <Link href="/terms" className="text-xs text-muted-foreground/60 hover:text-muted-foreground">
+              Terms of Service
+            </Link>
+            <Link href="/privacy" className="text-xs text-muted-foreground/60 hover:text-muted-foreground">
+              Privacy Policy
+            </Link>
+            <p className="text-xs text-muted-foreground/60">
+              &copy; {new Date().getFullYear()} Tailor. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

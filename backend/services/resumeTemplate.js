@@ -731,7 +731,7 @@ function validateResume(resume) {
 function generateResumeHtml(resume) {
   const basics = resume.basics || resume.header || resume;
   const name = pickText(basics.name, basics.fullName, resume.name, resume.fullName) || 'Resume';
-  const label = pickText(basics.label, basics.title, basics.headline, resume.title);
+  const label = pickText(basics.title, basics.label, basics.headline, resume.title);
   const contact = buildContactLines(basics);
 
   const summary = pickText(resume.summary, resume.basics && resume.basics.summary);
@@ -810,6 +810,13 @@ function generateResumeHtml(resume) {
       sections.push(renderCanonicalSection(section.kind, section.title || titleFromKind(section.kind), contentHtml));
       if (section.kind !== 'custom') renderedCanonicalKinds.add(section.kind);
     });
+
+    // Languages may exist in resumeData but not in parsed sections (e.g. when
+    // the original resume listed languages inside the skills section).  Append
+    // them if the dynamic sections didn't already include a languages entry.
+    if (!renderedCanonicalKinds.has('languages') && isNonEmptyText(languagesHtml)) {
+      sections.push(renderCanonicalSection('languages', 'Languages', languagesHtml));
+    }
   } else {
     if (isNonEmptyText(summaryHtml)) {
       sections.push(renderCanonicalSection('summary', 'Summary', summaryHtml));
