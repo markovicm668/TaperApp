@@ -38,7 +38,7 @@ function AuthShell({ children }: { children: ReactNode }) {
 
   const isLoginPage = pathname === '/login';
   const isLandingPage = pathname === '/';
-  const isPublicPage = isLoginPage || isLandingPage;
+  const isPublicPage = isLoginPage || isLandingPage || pathname === '/terms' || pathname === '/privacy';
 
   useEffect(() => {
     const ref = searchParams.get('ref');
@@ -87,7 +87,7 @@ function AuthShell({ children }: { children: ReactNode }) {
   }
 
   // Unauthenticated on protected pages → show spinner while redirecting
-  if (!user && !isLandingPage) {
+  if (!user && !isPublicPage) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
