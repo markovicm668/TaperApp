@@ -4,7 +4,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 
 const USERS_COLLECTION = "users";
 const REFERRALS_COLLECTION = "referrals";
-const REFERRAL_REWARD = 25;
+const REFERRAL_REWARD = 3;
 
 function generateReferralCode() {
   return crypto.randomBytes(6).toString("base64url");
@@ -67,6 +67,7 @@ async function claimReferralReward(refereeUid) {
 
     tx.update(refereeRef, {
       referralRewarded: true,
+      tokensRemaining: FieldValue.increment(REFERRAL_REWARD),
     });
 
     tx.create(db.collection(REFERRALS_COLLECTION).doc(), {

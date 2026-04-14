@@ -42,7 +42,7 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.use("/user/me", requireAuth, userRoute);
-app.use("/analyze", requireAuth, requireTokens(3), analyzeRoute);
+app.use("/analyze", requireAuth, requireTokens(1), analyzeRoute);
 app.use("/parse", requireAuth, requireTokens(1), parseRoute);
 app.use("/parse-pdf", requireAuth, requireTokens(1), parsePdfRoute);
 app.use("/export", requireAuth, exportRoute);

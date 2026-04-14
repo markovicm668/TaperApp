@@ -61,7 +61,7 @@ export default function LandingPage() {
             </a>
           </div>
           <p className="mt-4 text-xs text-muted-foreground/70">
-            100 free tokens on sign-up. No credit card required.
+            5 free credits on sign-up. No credit card required.
           </p>
         </div>
       </section>
@@ -182,7 +182,7 @@ export default function LandingPage() {
               { value: '95%', label: 'ATS Pass Rate' },
               { value: '< 50s', label: 'Analysis Time' },
               // { value: '12+', label: 'Resume Formats' },
-              { value: '100', label: 'Free Tokens' },
+              { value: '5', label: 'Free Credits' },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <p className="font-serif text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
@@ -205,7 +205,7 @@ export default function LandingPage() {
               Ready to tailor your resume?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Sign up in seconds, get 100 free tokens, and start optimizing your resume
+              Sign up in seconds, get 5 free credits, and start optimizing your resume
               for your next application.
             </p>
             <div className="mt-8">

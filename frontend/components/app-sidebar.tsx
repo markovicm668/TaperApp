@@ -60,7 +60,7 @@ export function AppSidebar({
     const link = `${window.location.origin}?ref=${referralCode}`;
     navigator.clipboard.writeText(link);
     toast.success('Referral link copied!', {
-      description: 'Share it with friends to earn 25 credits when they complete their first analysis.',
+      description: 'Share it with friends to earn 3 credits when they complete their first analysis.',
     });
   };
   const [homeItem, ...mainItems] = navItems;

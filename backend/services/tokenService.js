@@ -2,7 +2,7 @@ const { getFirebaseFirestore } = require("./firebaseAdmin");
 const { FieldValue } = require("firebase-admin/firestore");
 const { generateReferralCode } = require("./referralService");
 
-const INITIAL_TOKENS = 100;
+const INITIAL_TOKENS = 5;
 const USERS_COLLECTION = "users";
 
 function getUserRef(uid) {

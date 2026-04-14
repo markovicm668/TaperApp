@@ -37,7 +37,7 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2 className="text-base font-semibold text-foreground">4. Tokens and Usage</h2>
           <p>
-            New accounts receive 100 free tokens upon sign-up. Tokens are consumed when you perform
+            New accounts receive 5 free credits upon sign-up. Credits are consumed when you perform
             resume analyses. Token balances are non-transferable and have no monetary value. We
             reserve the right to modify token pricing or allocation at any time with reasonable
             notice.
