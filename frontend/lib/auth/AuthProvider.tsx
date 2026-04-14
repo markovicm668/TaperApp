@@ -79,6 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithPopup(auth, GOOGLE_PROVIDER);
     } catch (error) {
       if (isPopupBlockedError(error)) {
+        // signInWithRedirect fails on mobile Safari (iOS) due to storage
+        // partitioning (ITP): sessionStorage is cleared between the redirect
+        // and the return, so Firebase loses its state. Only use redirect on
+        // desktop browsers where this is not an issue.
+        const isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(
+          navigator.userAgent
+        );
+        if (isMobileBrowser) {
+          throw error;
+        }
         await signInWithRedirect(auth, GOOGLE_PROVIDER);
         return;
       }
