@@ -141,6 +141,10 @@ export default function ResultsPage() {
       return;
     }
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // Must open the window synchronously (before any await) so Safari doesn't block it as a popup
+    const iosWindowRef = isIOS ? window.open('', '_blank') : null;
+
     try {
       setIsExporting(true);
       const payloadForExport: ResumePdfPayload =
@@ -148,24 +152,38 @@ export default function ResultsPage() {
           ? filterResumePdfPayloadForSelection(exportResumePayload, pdfSelectionModel, pdfSelectionOverrides)
           : exportResumePayload;
       const blob = await exportResumePdf(payloadForExport);
-      const url = URL.createObjectURL(blob);
       const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
       const titleSlug = (targetRole || '').replace(/\s+/g, '_');
-      const fileName = titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`;
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const fileName = (titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`)
+        .replace(/[\/\\:*?"<>|]/g, '_');
+
       if (isIOS) {
-        window.open(url, '_blank');
+        const file = new File([blob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare?.({ files: [file] })) {
+          iosWindowRef?.close();
+          await navigator.share({ files: [file] });
+        } else {
+          const url = URL.createObjectURL(blob);
+          if (iosWindowRef) {
+            iosWindowRef.location.href = url;
+          } else {
+            window.open(url, '_blank');
+          }
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
       } else {
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = fileName.replace(/[\/\\:*?"<>|]/g, '_');
+        link.download = fileName;
         document.body.appendChild(link);
         link.click();
         link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 100);
       }
-      setTimeout(() => URL.revokeObjectURL(url), 100);
       toast.success('PDF downloaded');
     } catch (error) {
+      iosWindowRef?.close();
       const message = error instanceof Error ? error.message : 'Unknown error.';
       toast.error('PDF export failed', { description: message });
     } finally {

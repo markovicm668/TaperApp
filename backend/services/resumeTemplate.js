@@ -228,8 +228,9 @@ function buildContactLines(basics) {
   const location = formatLocation(basics.location);
   const url = pickText(basics.url, basics.website, basics.link, basics.portfolio);
 
-  if (email) primary.push(email);
-  if (phone) primary.push(phone);
+  const itemLinks = {};
+  if (email) { primary.push(email); itemLinks[email] = `mailto:${email}`; }
+  if (phone) { primary.push(phone); itemLinks[phone] = `tel:${phone}`; }
   if (location) primary.push(location);
   if (url) secondary.push(url);
 
@@ -251,6 +252,7 @@ function buildContactLines(basics) {
   return {
     primary: uniqueText(primary),
     secondary: uniqueText(secondary),
+    itemLinks,
   };
 }
 
@@ -754,18 +756,23 @@ function generateResumeHtml(resume) {
     dynamicSections.some((s) => s.kind === 'header') ||
     hasHeaderContent;
 
-  const renderContactLine = (items) =>
+  const renderContactLine = (items, itemLinks = {}) =>
     items
-      .map((item) => `<span>${escapeHtml(item)}</span>`)
+      .map((item) => {
+        const href = itemLinks[item];
+        return href
+          ? `<a href="${escapeHtml(href)}">${escapeHtml(item)}</a>`
+          : `<span>${escapeHtml(item)}</span>`;
+      })
       .join('<span class="contact-sep">|</span>');
 
   const contactHtml =
     contact.primary.length || contact.secondary.length
       ? `<div class="contact">${
-          contact.primary.length ? `<div class="contact-line">${renderContactLine(contact.primary)}</div>` : ''
+          contact.primary.length ? `<div class="contact-line">${renderContactLine(contact.primary, contact.itemLinks)}</div>` : ''
         }${
           contact.secondary.length
-            ? `<div class="contact-line">${renderContactLine(contact.secondary)}</div>`
+            ? `<div class="contact-line">${renderContactLine(contact.secondary, contact.itemLinks)}</div>`
             : ''
         }</div>`
       : '';
