@@ -159,10 +159,22 @@ export default function ResultsPage() {
 
       if (isIOS) {
         const file = new File([blob], fileName, { type: 'application/pdf' });
+        let shared = false;
         if (navigator.canShare?.({ files: [file] })) {
-          iosWindowRef?.close();
-          await navigator.share({ files: [file] });
-        } else {
+          try {
+            await navigator.share({ files: [file] });
+            shared = true;
+            iosWindowRef?.close();
+          } catch (shareError) {
+            if (shareError instanceof Error && shareError.name === 'AbortError') {
+              // User dismissed the share sheet — not an error
+              iosWindowRef?.close();
+              return;
+            }
+            // Share failed (e.g. Chrome for iOS policy) — fall through to blob URL fallback
+          }
+        }
+        if (!shared) {
           const url = URL.createObjectURL(blob);
           if (iosWindowRef) {
             iosWindowRef.location.href = url;
