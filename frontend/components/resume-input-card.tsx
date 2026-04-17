@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { sampleResume } from '@/lib/api';
+import { AdminOnly } from '@/components/admin-only';
 
 type InputTab = 'text' | 'pdf';
 
@@ -130,15 +131,17 @@ export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
             </CardDescription>
           </div>
           {activeTab === 'text' && (
-            <Button
-              variant="quiet"
-              size="sm"
-              onClick={insertSampleResume}
-              className="gap-1.5 whitespace-nowrap"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Use Sample Resume
-            </Button>
+            <AdminOnly>
+              <Button
+                variant="quiet"
+                size="sm"
+                onClick={insertSampleResume}
+                className="gap-1.5 whitespace-nowrap"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Use Sample Resume
+              </Button>
+            </AdminOnly>
           )}
         </div>
 

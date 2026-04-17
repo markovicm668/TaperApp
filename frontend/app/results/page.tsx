@@ -149,16 +149,21 @@ export default function ResultsPage() {
           : exportResumePayload;
       const blob = await exportResumePdf(payloadForExport);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
       const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
       const titleSlug = (targetRole || '').replace(/\s+/g, '_');
       const fileName = titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`;
-      link.download = fileName.replace(/[\/\\:*?"<>|]/g, '_');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        window.open(url, '_blank');
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName.replace(/[\/\\:*?"<>|]/g, '_');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 100);
       toast.success('PDF downloaded');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error.';

@@ -240,7 +240,7 @@ Return this exact schema:
     "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
     "rewrittenBullets": [
       {
-        "section": "experience" | "projects" | "skills",
+        "section": "experience" | "projects" | "skills" | "summary",
         "type": "modified" | "added" | "removed",
         "original": string,
         "improved": string,
@@ -262,7 +262,7 @@ Rules:
   - 80-100 = great
 - Infer targetRole and company from the job description
 - Use empty string if unknown
-- section must only be one of: experience, projects, skills
+- section must only be one of: experience, projects, skills, summary
 - Do not hallucinate technologies, metrics, achievements, or responsibilities
 - Do not invent experience the candidate does not already appear to have
 - You may strengthen wording, improve ATS keyword alignment, and make bullets more action-oriented
@@ -287,6 +287,13 @@ SKILLS RULES:
   - For category renames, only rename if it improves alignment with the JOB DESCRIPTION
   - Try to keep the same number of skills in each category unless the JOB DESCRIPTION indicates a clear need for more or fewer skills in that category
   - Try not to have less than 2 skills in a category
+
+SUMMARY RULES:
+- If the resume has a summary/profile section, rewrite it to better target the specific role in the JOB DESCRIPTION
+- Preserve the candidate's actual experience level, tone, and factual claims — do not invent new experience or embellish existing experience
+- Improve ATS alignment by naturally incorporating appropriate important keywords from the JD
+- Aim for the same length and style as the original summary
+- Return exactly one item: { "section": "summary", "type": "modified", "original": "<exact existing summary text>", "improved": "<rewritten summary>" }
 `;
   console.log("-> Gemini rewrite input data:", {
     usingParsedResume: Boolean(parsedResumeData),

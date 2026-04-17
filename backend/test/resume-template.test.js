@@ -399,3 +399,40 @@ test('generateResumeHtml avoids duplicated ABOUT ME label in canonical summary m
     true
   );
 });
+
+test('generateResumeHtml renders header from basics when sections exist but contain no header entry', () => {
+  const resume = {
+    basics: {
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+    },
+    work: [
+      {
+        position: 'Engineer',
+        company: 'Example Corp',
+        highlights: ['Built backend APIs'],
+      },
+    ],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    // sections array exists but does NOT include a kind:'header' entry
+    sections: [
+      {
+        id: 'canonical-work',
+        title: 'Professional Experience',
+        kind: 'work',
+        lines: ['Built backend APIs'],
+        renderMode: 'canonical',
+      },
+    ],
+    sectionOrder: ['canonical-work'],
+  };
+
+  const html = generateResumeHtml(resume);
+
+  assert.equal(html.includes('<h1 class="resume-name">Jane Doe</h1>'), true);
+  assert.equal(html.includes('jane@example.com'), true);
+});

@@ -123,10 +123,13 @@ function convertSkillChangesToBulletChanges(skills: AiSkillChange[]): BulletChan
     })
     .map(s => {
       const type = s.type as 'added' | 'removed' | 'modified';
+      // A "modified" change with no improved value is effectively a removal
+      const effectiveType: 'added' | 'removed' | 'modified' =
+        type === 'modified' && !s.improved?.trim() ? 'removed' : type;
       let improved = s.improved ?? '';
 
       // For additions, prefix with [Category] so downstream applyChangesToSkills can parse it
-      if (type === 'added' && s.category && improved) {
+      if (effectiveType === 'added' && s.category && improved) {
         improved = `[${s.category}] ${improved}`;
       }
 
@@ -134,7 +137,7 @@ function convertSkillChangesToBulletChanges(skills: AiSkillChange[]): BulletChan
         section: 'Skills',
         original: s.original ?? '',
         improved,
-        type,
+        type: effectiveType,
       };
     });
 }

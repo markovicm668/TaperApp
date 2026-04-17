@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { sampleJobDescription } from '@/lib/api';
+import { AdminOnly } from '@/components/admin-only';
 
 interface JobDescriptionCardProps {
   onJobDescriptionChange: (text: string) => void;
@@ -42,15 +43,17 @@ export function JobDescriptionCard({ onJobDescriptionChange }: JobDescriptionCar
               Paste the job posting you want to tailor your resume for.
             </CardDescription>
           </div>
-          <Button
-            variant="quiet"
-            size="sm"
-            onClick={insertSampleJd}
-            className="gap-1.5 whitespace-nowrap"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Use Sample JD
-          </Button>
+          <AdminOnly>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={insertSampleJd}
+              className="gap-1.5 whitespace-nowrap"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Use Sample JD
+            </Button>
+          </AdminOnly>
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4">

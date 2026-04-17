@@ -730,7 +730,8 @@ function validateResume(resume) {
 
 function generateResumeHtml(resume) {
   const basics = resume.basics || resume.header || resume;
-  const name = pickText(basics.name, basics.fullName, resume.name, resume.fullName) || 'Resume';
+  const rawName = pickText(basics.name, basics.fullName, resume.name, resume.fullName);
+  const name = rawName || 'Resume';
   const label = pickText(basics.title, basics.label, basics.headline, resume.title);
   const contact = buildContactLines(basics);
 
@@ -744,9 +745,14 @@ function generateResumeHtml(resume) {
 
   const dynamicSections = normalizeDynamicSections(resume);
   const hasDynamicSelection = dynamicSections.length > 0;
-  const includeHeader = hasDynamicSelection
-    ? dynamicSections.some((section) => section.kind === 'header')
-    : true;
+  const hasHeaderContent =
+    isNonEmptyText(rawName) ||
+    contact.primary.length > 0 ||
+    contact.secondary.length > 0;
+  const includeHeader =
+    !hasDynamicSelection ||
+    dynamicSections.some((s) => s.kind === 'header') ||
+    hasHeaderContent;
 
   const renderContactLine = (items) =>
     items
