@@ -1675,10 +1675,10 @@ export function DiffView({
             ? `${section.changeCount} highlighted change${section.changeCount === 1 ? '' : 's'} in this section.`
             : 'No highlighted changes in this section.';
         return (
-          <Card key={section.id} className={cn('border-border/85 bg-card/92 py-3 gap-2', !isExpanded && 'py-2')}>
-            <CardHeader className={cn('px-4', !isExpanded && 'pb-0')}>
+          <Card key={section.id} className="border-border/85 bg-card/92 py-2 gap-2">
+            <CardHeader className="px-4">
               <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className={cn('flex min-w-0 flex-1 gap-2', isExpanded ? 'items-start' : 'items-center')}>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <TriStateCheckbox
                     state={sectionState}
                     disabled={!hasSectionSelection}
@@ -1689,16 +1689,16 @@ export function DiffView({
                     type="button"
                     aria-expanded={isExpanded}
                     onClick={() => toggleSection(section.id)}
-                    className={cn('flex min-w-0 flex-1 gap-2 text-left', isExpanded ? 'items-start' : 'items-center')}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     {isExpanded ? (
-                      <ChevronDown className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     ) : (
                       <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     )}
                     <div className={cn('min-w-0', sectionState === 'unchecked' && 'opacity-60')}>
                       <CardTitle className="text-base">{section.title}</CardTitle>
-                      {isExpanded && <CardDescription>{sectionSummary}</CardDescription>}
+                      <CardDescription>{sectionSummary}</CardDescription>
                     </div>
                   </button>
                 </div>

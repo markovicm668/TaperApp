@@ -287,7 +287,7 @@ export default function ResultsPage() {
   const hasResumePayload = Boolean(exportResumePayload);
 
   return (
-    <div className="mx-auto w-full max-w-[1340px] space-y-8">
+    <div className="mx-auto w-full max-w-[1340px] space-y-1 px-4 py-6 sm:px-6 lg:px-8">
       <div className="rounded-2xl border border-border/85 bg-card/92 p-5 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_30px_rgba(15,23,42,0.035)] sm:p-6">
         <div className="space-y-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
