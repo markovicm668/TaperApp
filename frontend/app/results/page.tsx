@@ -175,12 +175,14 @@ export default function ResultsPage() {
           }
         }
         if (!shared) {
+          iosWindowRef?.close();
           const url = URL.createObjectURL(blob);
-          if (iosWindowRef) {
-            iosWindowRef.location.href = url;
-          } else {
-            window.open(url, '_blank');
-          }
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
           setTimeout(() => URL.revokeObjectURL(url), 10000);
         }
       } else {

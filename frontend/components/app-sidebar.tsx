@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { BarChart3, Copy, FileSearch, HelpCircle, History, Settings, Zap } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, History, Settings, Share2, Sparkles, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
@@ -11,6 +11,13 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,16 +59,25 @@ export function AppSidebar({
   const hasResults = useHasResults();
   const isCompact = mode === 'compact';
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
   const { signOut } = useAuth();
   const { referralCode } = useTokens();
 
+  const referralLink = referralCode
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}?ref=${referralCode}`
+    : '';
+
+  const plans = [
+    { id: 'yearly' as const, name: 'Yearly', badge: '70% off', bestDeal: true, billed: '$36 billed upfront', price: '$3' },
+    { id: 'monthly' as const, name: 'Monthly', badge: null, bestDeal: false, billed: '$9 billed monthly', price: '$9' },
+  ];
+
   const handleCopyReferralLink = () => {
-    if (!referralCode) return;
-    const link = `${window.location.origin}?ref=${referralCode}`;
-    navigator.clipboard.writeText(link);
-    toast.success('Referral link copied!', {
-      description: 'Share it with friends to earn 3 credits when they complete their first analysis.',
-    });
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
   const [homeItem, ...mainItems] = navItems;
   const initials =
@@ -342,7 +358,11 @@ export function AppSidebar({
           </>
         ) : (
           <>
-          
+            <div className="flex h-[4.25rem] shrink-0 items-center px-1">
+              <Link href="/" onClick={onNavigate} className="flex items-center gap-2 text-foreground transition-opacity hover:opacity-80">
+                <span className="font-serif text-lg font-semibold tracking-tight">Tailor</span>
+              </Link>
+            </div>
 
             <nav className="space-y-2">
               {showExpandToggle ? <div>{renderSidebarToggle('bottom')}</div> : null}
@@ -363,16 +383,127 @@ export function AppSidebar({
                     {creditsRemaining}
                   </span>
                 </Badge>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
+                    >
+                      <span className="text-[11px] tracking-wide text-muted-foreground">Upgrade to Pro</span>
+                      <ArrowUpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle className="text-base">Tailor Pro</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
+                        <FileSearch className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground" />
+                        <p className="text-xs leading-snug text-muted-foreground">Unlimited<br />analyses</p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
+                        <Sparkles className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground" />
+                        <p className="text-xs leading-snug text-muted-foreground">Advanced<br />AI insights</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {plans.map((plan) => (
+                        <button
+                          key={plan.id}
+                          onClick={() => setSelectedPlan(plan.id)}
+                          className={cn(
+                            'flex w-full items-center justify-between rounded-lg border px-3.5 py-3 text-left transition-colors',
+                            selectedPlan === plan.id
+                              ? 'border-foreground bg-secondary'
+                              : 'border-border hover:bg-muted/50'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
+                              selectedPlan === plan.id ? 'border-foreground' : 'border-muted-foreground/30'
+                            )}>
+                              {selectedPlan === plan.id && <div className="h-2 w-2 rounded-full bg-foreground" />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium">{plan.name}</span>
+                                {plan.badge && (
+                                  <span className="rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {plan.badge}
+                                  </span>
+                                )}
+                                {plan.bestDeal && (
+                                  <span className="rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    Best deal
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">{plan.billed}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold tabular-nums">
+                            {plan.price}<span className="text-xs font-normal text-muted-foreground"> / mo</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Button className="w-full">Upgrade to Tailor Pro</Button>
+                      <p className="text-center text-xs text-muted-foreground">Renews automatically · Cancel anytime</p>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
                 {isAuthenticated && referralCode && (
-                  <Button
-                    variant="outline"
-                    className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
-                    onClick={handleCopyReferralLink}
-                  >
-                    <span className="text-[11px] tracking-wide text-muted-foreground">Refer & Earn</span>
-                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
+                  <Dialog onOpenChange={(open) => { if (!open) setCopied(false); }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
+                      >
+                        <span className="text-[11px] tracking-wide text-muted-foreground">Earn credits</span>
+                        <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="text-base font-semibold">Invite a friend</DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-1 space-y-4">
+                        <div className="space-y-2.5">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">How it works</p>
+                          <ul className="space-y-3">
+                            <li className="flex items-center gap-3 text-sm">
+                              <Share2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>Share your invite link</span>
+                            </li>
+                            <li className="flex items-center gap-3 text-sm">
+                              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>Your friend gets <strong className="font-semibold">3 free credits</strong></span>
+                            </li>
+                            <li className="flex items-center gap-3 text-sm">
+                              <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>You get <strong className="font-semibold">3 credits</strong> when they complete their first analysis</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
+                            {referralLink}
+                          </div>
+                          <Button size="sm" className="shrink-0 gap-1.5" onClick={handleCopyReferralLink}>
+                            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copied ? 'Copied!' : 'Copy link'}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 )}
+
                 {renderProfileMenu()}
               </div>
             </div>

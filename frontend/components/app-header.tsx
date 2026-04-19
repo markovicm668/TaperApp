@@ -38,7 +38,6 @@ export function AppHeader({ creditsRemaining, userName, isAuthenticated = true }
         </Sheet>
         <div className="min-w-0">
           <p className="text-sm font-semibold tracking-tight text-foreground">Tailor</p>
-          <p className="text-[11px] tracking-wide text-muted-foreground">AI Resume Optimizer</p>
         </div>
       </div>
     </header>

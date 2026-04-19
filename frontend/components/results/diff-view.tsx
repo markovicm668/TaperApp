@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Edit3, Minus, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit3 } from 'lucide-react';
 import type { BulletChange } from '@/lib/types';
 import type { SectionViewModelRow } from '@/lib/resume/mappers';
 import {
@@ -846,7 +846,7 @@ export function DiffView({
       type="button"
       variant="quiet"
       size="icon"
-      className="h-8 w-8 flex-shrink-0 border border-transparent text-muted-foreground opacity-75 transition hover:border-border/70 hover:opacity-100 focus-visible:opacity-100"
+      className="-mt-1 h-8 w-8 flex-shrink-0 border border-transparent text-muted-foreground opacity-75 transition hover:border-border/70 hover:opacity-100 focus-visible:opacity-100"
       onClick={() => startInlineEditing(target, currentText)}
     >
       <Edit3 className="h-4 w-4" />
@@ -861,7 +861,7 @@ export function DiffView({
     if (!itemKey) return content;
     const state = getItemCheckState(itemKey);
     return (
-      <div key={`${key}-select`} className="flex items-start gap-2">
+      <div key={`${key}-select`} className="flex items-start gap-3">
         <TriStateCheckbox
           state={state}
           ariaLabel="Include item in PDF"
@@ -882,7 +882,7 @@ export function DiffView({
     if (isEditing && inlineTarget) {
       const baseClasses =
         variant === 'bullet'
-          ? 'flex items-start gap-2 py-1 text-sm leading-relaxed'
+          ? 'flex items-start gap-2 text-sm leading-relaxed'
           : 'text-sm leading-relaxed';
       return (
         <div key={row.id} className={cn(baseClasses, 'text-foreground')}>
@@ -912,7 +912,7 @@ export function DiffView({
 
     if (variant === 'bullet') {
       return (
-        <div key={row.id} className="flex items-start gap-2 py-1 text-sm leading-relaxed text-foreground/90">
+        <div key={row.id} className="flex items-start gap-2 text-sm leading-relaxed text-foreground/90">
           <span className="mt-[0.42rem] h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/55" />
           <span className="min-w-0 flex-1 whitespace-pre-wrap">{row.text}</span>
           {canEdit && inlineTarget && renderInlineEditButton(inlineTarget, row.text)}
@@ -954,7 +954,6 @@ export function DiffView({
     return (
       <div key={row.id} className="my-1">
         <div className={cn(changeLineClass, 'border-destructive/20 border-l-4 bg-destructive/[0.05]')}>
-            <Minus className="h-4 w-4 flex-shrink-0 text-destructive" />
           <div className={changeBodyClass}>
             {isEditing ? (
               <div className="min-w-0 flex-1">
@@ -996,7 +995,6 @@ export function DiffView({
     return (
       <div key={row.id} className="my-1">
         <div className={cn(changeLineClass, 'border-success/20 border-l-4 bg-success/[0.05]')}>
-            <Plus className="h-4 w-4 flex-shrink-0 text-success" />
           <div className={changeBodyClass}>
             {isEditing ? (
               <div className="min-w-0 flex-1">
@@ -1039,14 +1037,12 @@ export function DiffView({
       <div key={row.id} className="my-1">
         <div className="overflow-hidden rounded-md border border-border/70 bg-background/70">
           <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-destructive/45 bg-destructive/[0.04]')}>
-              <Minus className="h-4 w-4 flex-shrink-0 text-destructive" />
             <div className={changeBodyClass}>
               <span className="min-w-0 flex-1 whitespace-pre-wrap text-destructive/85">{row.original}</span>
             </div>
           </div>
           <div className="border-t border-border/60" />
           <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-success/45 bg-success/[0.04]')}>
-              <Plus className="h-4 w-4 flex-shrink-0 text-success" />
             <div className={changeBodyClass}>
               {isEditing ? (
                 <div className="min-w-0 flex-1">
@@ -1709,7 +1705,7 @@ export function DiffView({
               </div>
             </CardHeader>
             {isExpanded && (
-              <CardContent className="px-4 pb-2">
+              <CardContent className="px-3 pb-0">
                 <div className="rounded-xl border border-border/85 bg-muted/22 p-2.5">
                   <div className={cn('space-y-0', sectionState === 'unchecked' && 'opacity-65')}>
                     {section.kind === 'custom' ? (
