@@ -44,7 +44,9 @@ async function requireAuthToken(options?: GetTokenOptions): Promise<string> {
 async function parseApiErrorMessage(res: Response, fallbackMessage: string): Promise<string> {
   try {
     const data = await res.json();
-    return data?.error?.message || fallbackMessage;
+    const base = data?.error?.message || fallbackMessage;
+    const detail = data?.error?.details?.geminiError;
+    return detail ? `${base} (${detail})` : base;
   } catch {
     return fallbackMessage;
   }
@@ -96,75 +98,6 @@ async function fetchWithAuth(
 
   return res;
 }
-
-interface AiSkillChange {
-  id?: string;
-  type?: string;
-  original?: string;
-  improved?: string;
-  category?: string;
-}
-
-function normalizeSkillName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function convertSkillChangesToBulletChanges(skills: AiSkillChange[]): BulletChange[] {
-  return skills
-    .filter(s => s.type === 'added' || s.type === 'removed' || s.type === 'modified')
-    .filter(s => {
-      // Drop "modified" skills where original ≈ improved (Gemini returns all skills, even unchanged ones)
-      if (s.type === 'modified') {
-        const normOrig = normalizeSkillName(s.original ?? '');
-        const normImproved = normalizeSkillName(s.improved ?? '');
-        if (normOrig === normImproved) return false;
-      }
-      return true;
-    })
-    .map(s => {
-      const type = s.type as 'added' | 'removed' | 'modified';
-      // A "modified" change with no improved value is effectively a removal
-      const effectiveType: 'added' | 'removed' | 'modified' =
-        type === 'modified' && !s.improved?.trim() ? 'removed' : type;
-      let improved = s.improved ?? '';
-
-      // For additions, prefix with [Category] so downstream applyChangesToSkills can parse it
-      if (effectiveType === 'added' && s.category && improved) {
-        improved = `[${s.category}] ${improved}`;
-      }
-
-      return {
-        section: 'Skills',
-        original: s.original ?? '',
-        improved,
-        type: effectiveType,
-      };
-    });
-}
-
-const normalizeRewriteSection = (
-  section: string | undefined
-): AnalysisResult['rewriteSuggestions'][number]['section'] => {
-  if (section === 'experience' || section === 'projects' || section === 'skills' || section === 'summary') {
-    return section;
-  }
-  return 'experience';
-};
-
-const normalizeBulletSection = (section: string | undefined): string => {
-  const normalized = String(section || '').trim().toLowerCase();
-  if (
-    normalized === 'experience' ||
-    normalized === 'work' ||
-    normalized === 'professional experience'
-  ) {
-    return 'Experience';
-  }
-  if (normalized === 'projects' || normalized === 'project') return 'Projects';
-  if (normalized === 'skills' || normalized === 'skill') return 'Skills';
-  if (normalized === 'summary') return 'Summary';
-  return 'Experience';
-};
 
 export const sampleJobDescription = `
 About the job
@@ -259,83 +192,131 @@ export async function analyzeResume(
   }
 
   const ai = json.data as {
-    matchScore?: number;
-    roleSeniority?: AnalysisResult['roleSeniority'];
-    overallFit?: AnalysisResult['overallFit'];
-    targetRole?: string;
-    company?: string;
-    missingKeywords?: string[];
-    rewrittenBullets?: Array<{ section?: string; type?: string; original?: string; improved?: string }>;
-    skills?: AiSkillChange[];
-    rewriteSuggestions?: Array<{
-      section?: string;
-      originalText?: string;
-      improvedText?: string;
-      rationale?: string;
-    }>;
-    atsWarnings?: string[];
-    suggestions?: string[];
-    skillCategoryRenames?: Array<{ from?: string; to?: string }>;
+    meta?: {
+      matchScore?: number;
+      roleSeniority?: AnalysisResult['roleSeniority'];
+      overallFit?: AnalysisResult['overallFit'];
+      targetRole?: string;
+      company?: string;
+    };
+    highlights?: {
+      update?: Array<{ id: string; text: string }>;
+    };
+    skills?: {
+      add?: Array<{ name: string; category: string }>;
+      remove?: Array<{ id: string }>;
+    };
+    categories?: {
+      rename?: Array<{ from?: string; to?: string }>;
+    };
   };
 
-  const experienceBulletChanges: BulletChange[] = (ai.rewrittenBullets || []).map(b => ({
-    section: normalizeBulletSection(b.section),
-    original: b.original ?? '',
-    improved: b.improved ?? '',
-    type: (b.type === 'added' || b.type === 'removed' ? b.type : 'modified') as 'modified' | 'added' | 'removed',
-  }));
+  const meta = ai.meta ?? {};
 
-  const skillBulletChanges = convertSkillChangesToBulletChanges(ai.skills || []);
+  const workHighlightById = new Map<string, string>();
+  const projectHighlightById = new Map<string, string>();
+  const skillById = new Map<string, { name: string; category?: string }>();
+  if (parsedResumeData) {
+    (parsedResumeData.work ?? []).forEach(w =>
+      (w.highlights ?? []).forEach(h => {
+        if (h.id) workHighlightById.set(h.id, h.text);
+      })
+    );
+    (parsedResumeData.projects ?? []).forEach(p =>
+      (p.highlights ?? []).forEach(h => {
+        if (h.id) projectHighlightById.set(h.id, h.text);
+      })
+    );
+    (parsedResumeData.skills ?? []).forEach(s => {
+      if (s.id) skillById.set(s.id, { name: s.name, category: s.category });
+    });
+  }
+
+  const stripBracketPrefix = (s: string) => s.replace(/^\s*\[[^\]]+\]\s*/, '');
+
+  const highlightBulletChanges: BulletChange[] = [];
+  const summaryBulletChanges: BulletChange[] = [];
+
+  for (const h of ai.highlights?.update ?? []) {
+    const workText = workHighlightById.get(h.id);
+    const projectText = projectHighlightById.get(h.id);
+
+    if (workText !== undefined) {
+      highlightBulletChanges.push({
+        id: h.id,
+        section: 'Experience',
+        original: workText,
+        improved: h.text,
+        type: 'modified',
+      });
+    } else if (projectText !== undefined) {
+      highlightBulletChanges.push({
+        id: h.id,
+        section: 'Projects',
+        original: projectText,
+        improved: h.text,
+        type: 'modified',
+      });
+    } else {
+      summaryBulletChanges.push({
+        id: h.id,
+        section: 'Summary',
+        original: parsedResumeData?.summary ?? '',
+        improved: h.text,
+        type: 'modified',
+      });
+    }
+  }
+
+  const skillBulletChanges: BulletChange[] = [
+    ...(ai.skills?.add ?? []).map(s => {
+      const cleanName = stripBracketPrefix(s.name);
+      return {
+        section: 'Skills',
+        original: '',
+        improved: s.category ? `[${s.category}] ${cleanName}` : cleanName,
+        type: 'added' as const,
+      };
+    }),
+    ...(ai.skills?.remove ?? []).map(s => {
+      const cleanId = s.id.replace(/^\[|\]$/g, '');
+      return {
+        id: cleanId,
+        section: 'Skills',
+        original: skillById.get(cleanId)?.name ?? '',
+        improved: '',
+        type: 'removed' as const,
+      };
+    }),
+  ];
 
   const result: AnalysisResult = {
     id: `analysis-${Date.now()}`,
     createdAt: new Date().toISOString(),
 
-    matchScore: ai.matchScore ?? 0,
-    roleSeniority: ai.roleSeniority ?? 'mid',
-    overallFit: ai.overallFit ?? 'good',
+    matchScore: meta.matchScore ?? 0,
+    roleSeniority: meta.roleSeniority ?? 'mid',
+    overallFit: meta.overallFit ?? 'good',
 
-    targetRole: ai.targetRole || 'Unknown Role',
-    company: ai.company || 'Unknown Company',
+    targetRole: meta.targetRole || 'Unknown Role',
+    company: meta.company || 'Unknown Company',
     status: 'completed',
 
-    keywordGaps: (ai.missingKeywords || []).map((kw: string) => ({
-      keyword: kw,
-      importance: 'medium',
-      suggestedPhrases: [],
-      category: 'Missing keyword',
-    })),
+    keywordGaps: [],
 
-    bulletChanges: [...experienceBulletChanges, ...skillBulletChanges],
+    bulletChanges: [...highlightBulletChanges, ...summaryBulletChanges, ...skillBulletChanges],
 
-    skillCategoryRenames: (ai.skillCategoryRenames || [])
+    skillCategoryRenames: (ai.categories?.rename ?? [])
       .filter((r): r is { from: string; to: string } => Boolean(r.from && r.to))
       .map(r => ({ from: r.from!, to: r.to! })),
 
-    rewriteSuggestions: (ai.rewriteSuggestions || []).map((s, i: number) => ({
-      id: `rw-${i}`,
-      section: normalizeRewriteSection(s.section),
-      originalText: s.originalText ?? '',
-      improvedText: s.improvedText ?? '',
-      rationale: s.rationale ?? '',
-      atsNotes: '',
-    })),
+    rewriteSuggestions: [],
 
-    atsChecks: (ai.atsWarnings || []).map((w: string, i: number) => ({
-      id: `ats-${i}`,
-      name: 'ATS Warning',
-      status: 'warning',
-      message: w,
-      tip: 'Consider revising this section',
-    })),
+    atsChecks: [],
 
     riskFlags: [],
 
-    recommendedEdits: (ai.suggestions || []).map((s: string, i: number) => ({
-      id: `re-${i}`,
-      text: s,
-      completed: false,
-    })),
+    recommendedEdits: [],
   };
 
   return { result, parsed: json.parsed as AiParsedResumePayloadV2, tokensRemaining: json.tokensRemaining };

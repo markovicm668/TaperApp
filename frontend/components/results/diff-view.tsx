@@ -132,7 +132,7 @@ function TriStateCheckbox({
     <input
       ref={ref}
       type="checkbox"
-      className="mt-0.5 h-4 w-4 cursor-pointer rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-0.5 h-4 w-4 cursor-pointer rounded border border-gray-800 accent-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
       checked={state === 'checked'}
       disabled={disabled}
       aria-label={ariaLabel}
@@ -1223,7 +1223,6 @@ export function DiffView({
         const isEditing = isEditingInlineTarget(inlineTarget);
         const isName = item.kind === 'name';
         const isTitle = item.kind === 'title';
-        const isIdentityRow = isName || isTitle;
 
         const isTitleUpdatedByAi = isTitle && !!targetRole && item.label === targetRole;
         const textClassName = isName
@@ -1238,45 +1237,32 @@ export function DiffView({
         return (
           <div
             key={item.itemKey}
-            className={cn(
-              'rounded-lg border p-3',
-              isTitleUpdatedByAi
-                ? 'border-success/30 bg-success/[0.05]'
-                : 'border-border/75 bg-background/70',
-              isIdentityRow && 'sm:col-span-2',
-              state === 'unchecked' && 'opacity-55'
-            )}
+            className={cn('flex items-center gap-2 px-1 py-0.5', state === 'unchecked' && 'opacity-55')}
           >
-            <div className="flex items-start gap-2.5">
-              <TriStateCheckbox
-                state={state}
-                ariaLabel={`Include ${item.label || 'header item'} in PDF`}
-                onChange={checked => onPdfToggleItem?.(item.itemKey, checked)}
-              />
-              <div className="min-w-0 flex-1">
-                {isEditing && inlineTarget ? (
-                  <div>
-                    <Textarea
-                      value={draftText}
-                      onChange={event => setDraftText(event.target.value)}
-                      className="min-h-[96px] bg-background font-mono text-sm"
-                    />
-                    <div className="mt-2 flex gap-2">
-                      <Button size="sm" onClick={saveEditing}>
-                        Save
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={cancelEditing}>
-                        Cancel
-                      </Button>
-                    </div>
+            <TriStateCheckbox
+              state={state}
+              ariaLabel={`Include ${item.label || 'header item'} in PDF`}
+              onChange={checked => onPdfToggleItem?.(item.itemKey, checked)}
+            />
+            <div className="min-w-0 flex-1">
+              {isEditing && inlineTarget ? (
+                <div>
+                  <Textarea
+                    value={draftText}
+                    onChange={event => setDraftText(event.target.value)}
+                    className="min-h-[96px] bg-background font-mono text-sm"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" onClick={saveEditing}>Save</Button>
+                    <Button variant="ghost" size="sm" onClick={cancelEditing}>Cancel</Button>
                   </div>
-                ) : (
-                  <div className="flex items-start gap-2">
-                    <p className={cn('min-w-0 flex-1 whitespace-pre-wrap', textClassName)}>{item.label}</p>
-                    {inlineTarget && renderInlineEditButton(inlineTarget, item.label)}
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className={cn('min-w-0 flex-1 whitespace-pre-wrap', textClassName)}>{item.label}</p>
+                  {inlineTarget && renderInlineEditButton(inlineTarget, item.label)}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -1327,15 +1313,15 @@ export function DiffView({
         );
 
         return (
-          <div className="space-y-4">
-            <div className="space-y-3">
+          <div className="space-y-2">
+            <div className="space-y-1.5">
               {identityItems.length > 0 && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-1.5">
                   {identityItems.map(item => renderStructuredHeaderItem(item))}
                 </div>
               )}
               {contactItems.length > 0 && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col">
                   {contactItems.map(item => renderStructuredHeaderItem(item))}
                 </div>
               )}
@@ -1509,7 +1495,7 @@ export function DiffView({
             </div>
           </div>
           {block.rows.length > 0 && (
-            <div className="mt-3 pl-2 sm:pl-4">
+            <div className="mt-2 pl-2 sm:pl-3">
               <div className="space-y-1">
                 {(() => {
                   let educationHonorIndex = 0;
@@ -1665,7 +1651,7 @@ export function DiffView({
   };
 
   return (
-    <div className="space-y-5 p-5">
+    <div className="space-y-2 p-3">
       {sectionModels.length === 0 && (
         <Card className="border-border/85 bg-card/92">
           <CardHeader className="pb-3">
@@ -1693,8 +1679,8 @@ export function DiffView({
             ? `${section.changeCount} highlighted change${section.changeCount === 1 ? '' : 's'} in this section.`
             : 'No highlighted changes in this section.';
         return (
-          <Card key={section.id} className={cn('border-border/85 bg-card/92', !isExpanded && 'py-3')}>
-            <CardHeader className={cn('pb-3', !isExpanded && 'pb-0')}>
+          <Card key={section.id} className={cn('border-border/85 bg-card/92 py-3 gap-2', !isExpanded && 'py-2')}>
+            <CardHeader className={cn('px-4', !isExpanded && 'pb-0')}>
               <div className="flex w-full flex-wrap items-center justify-between gap-2">
                 <div className={cn('flex min-w-0 flex-1 gap-2', isExpanded ? 'items-start' : 'items-center')}>
                   <TriStateCheckbox
@@ -1710,7 +1696,7 @@ export function DiffView({
                     className={cn('flex min-w-0 flex-1 gap-2 text-left', isExpanded ? 'items-start' : 'items-center')}
                   >
                     {isExpanded ? (
-                      <ChevronDown className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <ChevronDown className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     ) : (
                       <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     )}
@@ -1723,8 +1709,8 @@ export function DiffView({
               </div>
             </CardHeader>
             {isExpanded && (
-              <CardContent>
-                <div className="rounded-xl border border-border/85 bg-muted/22 p-4 sm:p-5">
+              <CardContent className="px-4 pb-2">
+                <div className="rounded-xl border border-border/85 bg-muted/22 p-2.5">
                   <div className={cn('space-y-0', sectionState === 'unchecked' && 'opacity-65')}>
                     {section.kind === 'custom' ? (
                       <div className="py-1">{renderCustomSectionRows(section, selectionContext)}</div>
@@ -1732,7 +1718,7 @@ export function DiffView({
                       hierarchyBlocks.map((block, index) => (
                         <div
                           key={`${section.id}-${block.id}`}
-                          className={cn('py-4 first:pt-0 last:pb-0', index > 0 && 'border-t border-border/70')}
+                          className={cn('py-2 first:pt-0 last:pb-0', index > 0 && 'border-t border-border/70')}
                         >
                           {renderHierarchyBlock(block, selectionContext, section.kind)}
                         </div>

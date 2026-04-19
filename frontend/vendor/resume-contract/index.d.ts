@@ -220,6 +220,8 @@ export interface KeywordGap {
 }
 
 export interface BulletChange {
+  id?: string;
+  category?: string;
   section: string;
   original: string;
   improved: string;

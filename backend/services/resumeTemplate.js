@@ -895,6 +895,10 @@ function generateResumeHtml(resume) {
         font-size: 11px;
         line-height: 1.2;
       }
+      .contact-line a {
+        color: inherit;
+        text-decoration: none;
+      }
       .contact-sep {
         margin: 0 4px;
         color: #666666;

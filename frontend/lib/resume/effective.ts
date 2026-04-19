@@ -24,6 +24,8 @@ type ChangeOrigin = 'ai' | 'user';
 
 interface NormalizedBulletChange {
   index: number;
+  id?: string;
+  category?: string;
   type: BulletChange['type'];
   original: string;
   improved: string;
@@ -115,6 +117,8 @@ function normalizeBulletSection(section: string | undefined): CanonicalBulletSec
 function normalizeBulletChanges(changes: BulletChange[]): NormalizedBulletChange[] {
   return changes.map((change, index) => ({
     index,
+    id: change.id,
+    category: change.category,
     type: change.type,
     original: change.original || '',
     improved: change.improved || '',
@@ -200,6 +204,7 @@ function applyChangesToHighlights(
     const matchedChange = changes.find(change => {
       if (usedChanges.has(change.index)) return false;
       if (change.type === 'added') return false;
+      if (change.id) return highlight.id === change.id;
 
       return (
         bulletMatchesChange(normalizedOriginal, normalizedOriginalLoose, change) ||
@@ -430,6 +435,7 @@ function applyChangesToSkills(
     const matchedChange = changes.find(change => {
       if (usedChanges.has(change.index)) return false;
       if (change.type === 'added') return false;
+      if (change.id) return skill.id === change.id;
       return bulletMatchesChange(normalizedName, normalizedNameLoose, change);
     });
 
@@ -454,14 +460,16 @@ function applyChangesToSkills(
       continue;
     }
 
-    // modified: rename the skill, preserve original
+    // modified: rename the skill and optionally update category, preserve original
     const improvedName = normalizeBulletForStorage(matchedChange.improved);
     const newName = improvedName || skillName;
+    const newCategory = matchedChange.category !== undefined ? matchedChange.category : skill.category;
     result.push({
       ...skill,
       name: newName,
+      category: newCategory,
       originalName: originalName || skillName,
-      source: newName === originalName ? (skill.source || 'user') : origin,
+      source: newName === originalName && newCategory === skill.category ? (skill.source || 'user') : origin,
     });
   }
 

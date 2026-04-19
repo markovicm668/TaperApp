@@ -60,7 +60,7 @@ function serializeParsedResume(resumeData) {
         .join(" | ");
       lines.push(heading);
       (entry.highlights || []).forEach((h) => {
-        if (h.text) lines.push(`- ${h.text}`);
+        if (h.text) lines.push(`[${h.id}] ${h.text}`);
       });
     });
   }
@@ -79,7 +79,7 @@ function serializeParsedResume(resumeData) {
       if (techs) lines.push(`Technologies: ${techs}`);
       if (entry.description) lines.push(`Description: ${entry.description}`);
       (entry.highlights || []).forEach((h) => {
-        if (h.text) lines.push(`- ${h.text}`);
+        if (h.text) lines.push(`[${h.id}] ${h.text}`);
       });
     });
   }
@@ -93,10 +93,10 @@ function serializeParsedResume(resumeData) {
     skillEntries.forEach((s) => {
       const cat = s.category || "Other";
       if (!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push(s.name);
+      byCategory[cat].push(s.id ? `[${s.id}] ${s.name}` : s.name);
     });
-    Object.entries(byCategory).forEach(([cat, names]) => {
-      lines.push(`${cat}: ${names.join(", ")}`);
+    Object.entries(byCategory).forEach(([cat, entries]) => {
+      lines.push(`${cat}: ${entries.join(", ")}`);
     });
   }
 
@@ -151,6 +151,8 @@ async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
   const resumeForPrompt = parsedResumeData
     ? serializeParsedResume(parsedResumeData)
     : resumeText;
+
+    console.log("-> Serialized resume for prompt:", resumeForPrompt);
 
   // const prompt = `
   // You are an ATS resume optimizer. You improve EXPERIENCE section bullets AND the SKILLS section.
@@ -223,34 +225,54 @@ You must follow this process internally before generating output:
 1. Infer the target role, company, seniority, and most important keywords from the job description.
 2. Identify the most important required skills, tools, responsibilities, and soft skills.
 3. Compare the resume against those requirements.
-4. Rewrite existing bullets to better match the job description while preserving the truth of the original experience.
+4. Rewrite existing resume to better match the job description while preserving the truth of the original resume.
 5. Suggest only the most important missing skills.
 6. Remove only skills that are clearly irrelevant.
+7. Use only IDs provided in the original resume data — do not invent new IDs.
 
-Return STRICT JSON ONLY.
 Do not include markdown, explanations, or text outside JSON.
-
-Return this exact schema:
-  Return STRICT JSON ONLY with this schema:
+Return STRICT JSON ONLY with this schema:
   {
-    "matchScore": number (0-100),
+  "meta": {
+    "matchScore": number,
     "overallFit": "poor" | "fair" | "good" | "great",
     "targetRole": string,
     "company": string,
-    "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
-    "rewrittenBullets": [
+    "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive"
+  },
+
+  "highlights": {
+    "update": [
       {
-        "section": "experience" | "projects" | "skills" | "summary",
-        "type": "modified" | "added" | "removed",
-        "original": string,
-        "improved": string,
-        "rationale": string
+        "id": string,
+        "text": string
+      }
+    ]
+  },
+
+  "categories": {
+    "rename": [
+      {
+        "from": string,
+        "to": string
+      }
+    ]
+  },
+
+  "skills": {
+    "add": [
+      {
+        "name": string,
+        "category": string
       }
     ],
-    "skillCategoryRenames": [
-      { "from": "exact current category name", "to": "new category name" }
+    "remove": [
+      {
+        "id": string
+      }
     ]
   }
+}
 
 Rules:
 - Output valid JSON only
@@ -262,38 +284,33 @@ Rules:
   - 80-100 = great
 - Infer targetRole and company from the job description
 - Use empty string if unknown
-- section must only be one of: experience, projects, skills, summary
-- Do not hallucinate technologies, metrics, achievements, or responsibilities
-- Do not invent experience the candidate does not already appear to have
+- Do not invent technologies, metrics, achievements, or responsibilities
+- Do not suggest experience the candidate does not already appear to have
 - You may strengthen wording, improve ATS keyword alignment, and make bullets more action-oriented
-- Preserve the original meaning of each bullet
 - Use concise, professional language
-- Keep improved bullets to one line each
 - Prefer strong action verbs such as Led, Built, Managed, Improved, Designed, Implemented, Coordinated, Optimized
 
-EXPERIENCE / PROJECT BULLET RULES:
+HIGHLIGHTS RULES:
 - Only rewrite bullets that would materially benefit ATS alignment
-- original must exactly match the bullet from the resume
-- improved must be a stronger but truthful version of the original
-- type must be "modified"
+- id must exactly match the bullet from the resume
+- improved must be a stronger but truthful version of the original bullet, optimized for ATS and aligned to the JD
 - Prioritize bullets related to the most important JD requirements
 - Do not rewrite every bullet if some are already strong
 
 SKILLS RULES:
-  - Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume (type: "added", original: "", improved: "[CategoryName] skill name" — prefix with the target category in square brackets). IMPORTANT: the CategoryName MUST be one of the exact category names already present in the resume (e.g. if the resume has "Soft", use "[Soft]" not "[Soft Skills]"). Only create a new category name if no existing category is a reasonable fit.
-  - Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")
-  - Remove skills that are clearly not relevant to the JOB DESCRIPTION (type: "removed", original: "SkillName", improved: "")
-  - Do not add or remove more than 5 skills in total
+  - Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume
+  - Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION
+  - Remove skills that are clearly not relevant to the JOB DESCRIPTION
   - For category renames, only rename if it improves alignment with the JOB DESCRIPTION
   - Try to keep the same number of skills in each category unless the JOB DESCRIPTION indicates a clear need for more or fewer skills in that category
-  - Try not to have less than 2 skills in a category
+  - Do not have less than 2 skills in a category
 
 SUMMARY RULES:
 - If the resume has a summary/profile section, rewrite it to better target the specific role in the JOB DESCRIPTION
 - Preserve the candidate's actual experience level, tone, and factual claims — do not invent new experience or embellish existing experience
 - Improve ATS alignment by naturally incorporating appropriate important keywords from the JD
 - Aim for the same length and style as the original summary
-- Return exactly one item: { "section": "summary", "type": "modified", "original": "<exact existing summary text>", "improved": "<rewritten summary>" }
+- Return updated summary in highlights section with exactly the same ID as the original summary
 `;
   console.log("-> Gemini rewrite input data:", {
     usingParsedResume: Boolean(parsedResumeData),
@@ -311,7 +328,7 @@ SUMMARY RULES:
 
   try {
     const parsed = JSON.parse(outputText);
-    console.log("-> Parsed Gemini output:", parsed);
+    console.log("-> Parsed Gemini output:", JSON.stringify(parsed, null, 2));
     return parsed;
   } catch (e) {
     console.error("-> JSON Parsing Failed in service. Raw AI Output:", outputText.slice(0, 500) + '...');

@@ -30,6 +30,13 @@ const SAMPLE_RESUME: ResumePdfPayload = {
   languages: [],
 };
 
+const EMPTY_AI_RESPONSE = {
+  meta: { matchScore: 70, overallFit: 'good', targetRole: 'Engineer', company: 'Acme', roleSeniority: 'mid' },
+  highlights: { update: [] },
+  skills: { add: [], remove: [] },
+  categories: { rename: [] },
+};
+
 test.beforeEach(() => {
   configureApiAuth({
     tokenResolver: async options =>
@@ -67,7 +74,7 @@ test('exportResumePdf posts only resume payload and attaches bearer token', asyn
   });
 });
 
-test('analyzeResume preserves rewritten bullet section when provided', async () => {
+test('analyzeResume maps highlight updates and routes unknown IDs to Summary', async () => {
   let capturedAuthHeader: string | null = null;
 
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -77,30 +84,81 @@ test('analyzeResume preserves rewritten bullet section when provided', async () 
       status: 200,
       json: async () => ({
         data: {
-          rewrittenBullets: [
-            {
-              section: 'projects',
-              original: 'Built a portfolio app',
-              improved: 'Built a portfolio app adopted by 2,000+ monthly users',
-            },
-          ],
-          rewriteSuggestions: [],
-          missingKeywords: [],
-          atsWarnings: [],
-          suggestions: [],
+          ...EMPTY_AI_RESPONSE,
+          highlights: {
+            update: [
+              {
+                id: 'work-1-highlight-1',
+                text: 'Built a portfolio app adopted by 2,000+ monthly users',
+              },
+              {
+                id: 'project-1-highlight-1',
+                text: 'Built a portfolio app adopted by 2,000+ monthly users',
+              },
+              {
+                id: 'summary',
+                text: 'Results-oriented engineer rewritten for the role.',
+              },
+            ],
+          },
         },
       }),
     } as unknown as Response;
   }) as typeof fetch;
 
-  const result = await analyzeResume(
+  const parsedResumeData = {
+    summary: 'Original summary text.',
+    work: [
+      {
+        id: 'work-1',
+        highlights: [
+          { id: 'work-1-highlight-1', text: 'Built a portfolio app' },
+        ],
+      },
+    ],
+    projects: [
+      {
+        id: 'project-1',
+        highlights: [
+          { id: 'project-1-highlight-1', text: 'Original project bullet' },
+        ],
+      },
+    ],
+    education: [],
+    awards: [],
+    skills: [],
+    languages: [],
+    customSections: [],
+    sectionOrder: [],
+    versions: [],
+  } as unknown as Parameters<typeof analyzeResume>[2];
+
+  const { result } = await analyzeResume(
     { type: 'text', content: 'Projects\n- Built a portfolio app' },
-    { text: 'Need someone with shipped project outcomes.' }
+    { text: 'Need someone with shipped project outcomes.' },
+    parsedResumeData
   );
 
   assert.equal(capturedAuthHeader, `Bearer ${TEST_TOKEN}`);
-  assert.equal(result.bulletChanges.length, 1);
-  assert.equal(result.bulletChanges[0]?.section, 'Projects');
+  assert.equal(result.bulletChanges.length, 3);
+
+  const workChange = result.bulletChanges.find(c => c.id === 'work-1-highlight-1');
+  assert.ok(workChange);
+  assert.equal(workChange?.section, 'Experience');
+  assert.equal(workChange?.original, 'Built a portfolio app');
+  assert.equal(workChange?.improved, 'Built a portfolio app adopted by 2,000+ monthly users');
+
+  const projectChange = result.bulletChanges.find(c => c.section === 'Projects');
+  assert.ok(projectChange);
+  assert.equal(projectChange?.id, 'project-1-highlight-1');
+  assert.equal(projectChange?.original, 'Original project bullet');
+  assert.equal(projectChange?.improved, 'Built a portfolio app adopted by 2,000+ monthly users');
+
+  const summaryChange = result.bulletChanges.find(c => c.section === 'Summary');
+  assert.ok(summaryChange);
+  assert.equal(summaryChange?.id, 'summary');
+  assert.equal(summaryChange?.original, 'Original summary text.');
+  assert.equal(summaryChange?.improved, 'Results-oriented engineer rewritten for the role.');
 });
 
 test('analyzeResume retries once with refreshed token after initial 401', async () => {
@@ -123,13 +181,7 @@ test('analyzeResume retries once with refreshed token after initial 401', async 
       ok: true,
       status: 200,
       json: async () => ({
-        data: {
-          rewrittenBullets: [],
-          rewriteSuggestions: [],
-          missingKeywords: [],
-          atsWarnings: [],
-          suggestions: [],
-        },
+        data: EMPTY_AI_RESPONSE,
       }),
     } as unknown as Response;
   }) as typeof fetch;
@@ -191,33 +243,49 @@ test('analyzeResume throws a clear auth error when token resolver is missing', a
   );
 });
 
-test('analyzeResume falls back to Experience section when rewritten bullet section is missing', async () => {
+test('analyzeResume maps skill add/remove and strips bracket prefixes', async () => {
   globalThis.fetch = (async () => {
     return {
       ok: true,
       status: 200,
       json: async () => ({
         data: {
-          rewrittenBullets: [
-            {
-              original: 'Built backend APIs',
-              improved: 'Built backend APIs serving 1M+ monthly requests',
-            },
-          ],
-          rewriteSuggestions: [],
-          missingKeywords: [],
-          atsWarnings: [],
-          suggestions: [],
+          ...EMPTY_AI_RESPONSE,
+          skills: {
+            add: [{ name: '[CRM] Salesforce', category: 'CRM' }],
+            remove: [{ id: 'skill-old-1' }],
+          },
         },
       }),
     } as unknown as Response;
   }) as typeof fetch;
 
-  const result = await analyzeResume(
+  const parsedResumeData = {
+    summary: '',
+    work: [],
+    projects: [],
+    education: [],
+    awards: [],
+    skills: [
+      { id: 'skill-old-1', name: 'jQuery', category: 'Languages' },
+    ],
+    languages: [],
+    customSections: [],
+    sectionOrder: [],
+    versions: [],
+  } as unknown as Parameters<typeof analyzeResume>[2];
+
+  const { result } = await analyzeResume(
     { type: 'text', content: 'Experience\n- Built backend APIs' },
-    { text: 'Need someone with API scaling experience.' }
+    { text: 'Need someone with API scaling experience.' },
+    parsedResumeData
   );
 
-  assert.equal(result.bulletChanges.length, 1);
-  assert.equal(result.bulletChanges[0]?.section, 'Experience');
+  assert.equal(result.bulletChanges.length, 2);
+  const added = result.bulletChanges.find(c => c.type === 'added');
+  const removed = result.bulletChanges.find(c => c.type === 'removed');
+
+  assert.equal(added?.improved, '[CRM] Salesforce');
+  assert.equal(removed?.id, 'skill-old-1');
+  assert.equal(removed?.original, 'jQuery');
 });

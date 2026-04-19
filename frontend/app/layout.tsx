@@ -1,12 +1,12 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { IBM_Plex_Mono, Manrope, Source_Serif_4 } from 'next/font/google';
+import { IBM_Plex_Mono, Inter, Source_Serif_4 } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import AppWrapper from './AppWrapper';
 import './globals.css';
 
-const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope' });
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', weight: ['300', '400', '500', '600'] });
 const sourceSerif = Source_Serif_4({ subsets: ['latin'], variable: '--font-source-serif' });
 const plexMono = IBM_Plex_Mono({
   subsets: ['latin'],
@@ -33,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${manrope.variable} ${sourceSerif.variable} ${plexMono.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${sourceSerif.variable} ${plexMono.variable} font-sans antialiased`}>
         <AppWrapper>{children}</AppWrapper>
         <Analytics />
         <SpeedInsights />
