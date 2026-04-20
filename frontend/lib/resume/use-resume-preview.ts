@@ -19,7 +19,7 @@ export function useResumePreview(
   });
 
   const abortRef = useRef<AbortController | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const payloadRef = useRef<ResumePdfPayload | null>(null);
 
   // Serialize outside the effect so the string (compared by value) is the
