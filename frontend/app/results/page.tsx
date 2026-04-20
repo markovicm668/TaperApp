@@ -145,7 +145,9 @@ export default function ResultsPage() {
       return;
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
     // Must open the window synchronously (before any await) so Safari doesn't block it as a popup
     const iosWindowRef = isIOS ? window.open('', '_blank') : null;
 
@@ -162,33 +164,15 @@ export default function ResultsPage() {
         .replace(/[\/\\:*?"<>|]/g, '_');
 
       if (isIOS) {
-        const file = new File([blob], fileName, { type: 'application/pdf' });
-        let shared = false;
-        if (navigator.canShare?.({ files: [file] })) {
-          try {
-            await navigator.share({ files: [file] });
-            shared = true;
-            iosWindowRef?.close();
-          } catch (shareError) {
-            if (shareError instanceof Error && shareError.name === 'AbortError') {
-              // User dismissed the share sheet — not an error
-              iosWindowRef?.close();
-              return;
-            }
-            // Share failed (e.g. Chrome for iOS policy) — fall through to blob URL fallback
-          }
+        // iOS Safari ignores the <a download> attribute on blob URLs, so we navigate
+        // the pre-opened tab to the blob URL and let Safari's PDF viewer handle saving.
+        const url = URL.createObjectURL(blob);
+        if (iosWindowRef) {
+          iosWindowRef.location.href = url;
+        } else {
+          window.location.href = url;
         }
-        if (!shared) {
-          iosWindowRef?.close();
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
-        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
       } else {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -387,7 +371,7 @@ export default function ResultsPage() {
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            Editor
+            Diff View
           </button>
           <button
             onClick={() => setMobileTab('preview')}
