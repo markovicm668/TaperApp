@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RotateCcw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
+import { ResumePreview } from '@/components/results/resume-preview';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { Button } from '@/components/ui/button';
 import { ScoreRing } from '@/components/score-ring';
 import { exportResumePdf } from '@/lib/api';
+import { useResumePreview } from '@/lib/resume/use-resume-preview';
 import type { ResumePdfPayload } from '@/lib/types';
 import {
   useBulletChanges,
@@ -42,6 +45,7 @@ export default function ResultsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [isCopyingJson, setIsCopyingJson] = useState(false);
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
+  const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -286,6 +290,15 @@ export default function ResultsPage() {
   const hasOriginal = sectionRows.some(row => row.hasContent);
   const hasResumePayload = Boolean(exportResumePayload);
 
+  const previewPayload = useMemo<ResumePdfPayload | null>(() => {
+    if (!exportResumePayload) return null;
+    return pdfSelectionModel
+      ? filterResumePdfPayloadForSelection(exportResumePayload, pdfSelectionModel, pdfSelectionOverrides)
+      : exportResumePayload;
+  }, [exportResumePayload, pdfSelectionModel, pdfSelectionOverrides]);
+
+  const preview = useResumePreview(previewPayload);
+
   return (
     <div className="mx-auto w-full max-w-[1340px] space-y-1 px-4 py-6 sm:px-6 lg:px-8">
       <div className="rounded-2xl border border-border/85 bg-card/92 p-5 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_30px_rgba(15,23,42,0.035)] sm:p-6">
@@ -338,17 +351,57 @@ export default function ResultsPage() {
       </div>
 
       <section className="w-full" aria-label="Diff View">
-        <DiffView
-          hasOriginal={hasOriginal}
-          changes={bulletChanges}
-          onChangesUpdate={setBulletChanges}
-          onInlineEdit={applyInlineEdit}
-          pdfSelectionModel={pdfSelectionModel}
-          pdfSelectionOverrides={pdfSelectionOverrides}
-          onPdfToggleSection={handleTogglePdfSection}
-          onPdfToggleItem={handleTogglePdfItem}
-        />
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <div className={cn('w-full lg:w-[55%]', mobileTab === 'preview' && 'hidden lg:block')}>
+            <DiffView
+              hasOriginal={hasOriginal}
+              changes={bulletChanges}
+              onChangesUpdate={setBulletChanges}
+              onInlineEdit={applyInlineEdit}
+              pdfSelectionModel={pdfSelectionModel}
+              pdfSelectionOverrides={pdfSelectionOverrides}
+              onPdfToggleSection={handleTogglePdfSection}
+              onPdfToggleItem={handleTogglePdfItem}
+            />
+          </div>
+          <div className={cn('w-full pt-3 lg:w-[40%]', mobileTab === 'diff' && 'hidden lg:block')}>
+            <div className="sticky top-4">
+              <ResumePreview
+                html={preview.html}
+                isLoading={preview.isLoading}
+                error={preview.error}
+              />
+            </div>
+          </div>
+        </div>
       </section>
+
+      <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 lg:hidden">
+        <div className="flex gap-1 rounded-full border border-border/80 bg-card p-1 shadow-lg">
+          <button
+            onClick={() => setMobileTab('diff')}
+            className={cn(
+              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              mobileTab === 'diff'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Editor
+          </button>
+          <button
+            onClick={() => setMobileTab('preview')}
+            className={cn(
+              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              mobileTab === 'preview'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Preview
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

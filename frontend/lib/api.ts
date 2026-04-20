@@ -386,6 +386,17 @@ export async function parseResumePdf(
   return parsed;
 }
 
+export async function fetchResumePreviewHtml(resume: ResumePdfPayload): Promise<string> {
+  const res = await fetchWithAuth('/export/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resume }),
+  }, 'Preview generation failed');
+
+  const json = await res.json();
+  return json.html as string;
+}
+
 export async function exportResumePdf(resume: ResumePdfPayload): Promise<Blob> {
   const res = await fetchWithAuth('/export/pdf', {
     method: 'POST',

@@ -9,6 +9,28 @@ function createExportRouter({
 } = {}) {
   const router = express.Router();
 
+  router.post("/preview", async (req, res) => {
+    try {
+      const { resume } = req.body || {};
+      const validation = validate(resume);
+      if (!validation.ok) {
+        return res.status(400).json({
+          error: { code: "INVALID_INPUT", message: validation.message },
+        });
+      }
+      const html = renderResumeHtml(resume);
+      return res.status(200).json({ html });
+    } catch (err) {
+      console.error("-> Preview error:", err);
+      return res.status(500).json({
+        error: {
+          code: err.code || "PREVIEW_FAILED",
+          message: err.message || "Failed to generate preview.",
+        },
+      });
+    }
+  });
+
   router.post("/pdf", async (req, res) => {
     try {
       const { resume } = req.body || {};
