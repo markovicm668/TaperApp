@@ -133,7 +133,7 @@ function AuthShell({ children }: { children: ReactNode }) {
           {isFullWidthPage ? (
             children
           ) : (
-            <div className="mx-auto w-full max-w-[1400px] px-0.1 py-6 lg:px-8 lg:py-8">{children}</div>
+            <div className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">{children}</div>
           )}
         </main>
       </div>

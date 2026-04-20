@@ -177,12 +177,12 @@ export default function LandingPage() {
       {/* Stats */}
       <section>
         <div className="mx-auto max-w-4xl px-6 py-16 sm:py-20">
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-2">
             {[
               { value: '95%', label: 'ATS Pass Rate' },
               { value: '< 50s', label: 'Analysis Time' },
               // { value: '12+', label: 'Resume Formats' },
-              { value: '5', label: 'Free Credits' },
+              // { value: '5', label: 'Free Credits' },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <p className="font-serif text-3xl font-semibold tracking-tight text-primary sm:text-4xl">

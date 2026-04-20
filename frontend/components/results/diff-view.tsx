@@ -536,10 +536,6 @@ export function DiffView({
   // `null` means expansion state has not been initialized for the current populated view yet.
   const [expandedSections, setExpandedSections] = useState<Set<string> | null>(null);
 
-  useEffect(() => {
-    setLocalChanges(changes);
-  }, [changes]);
-
   const sectionModels = useMemo<SectionRenderModel[]>(() => {
     const indexedChanges: IndexedChange[] = localChanges.map((change, index) => ({
       index,
@@ -650,7 +646,7 @@ export function DiffView({
     setExpandedSections(prev => {
       const validIds = new Set(sectionModels.map(section => section.id));
       if (prev === null) {
-        return new Set(validIds);
+        return new Set(sectionModels.filter(s => s.changeCount > 0).map(s => s.id));
       }
 
       const next = new Set<string>();
@@ -948,7 +944,7 @@ export function DiffView({
 
   const changeLineClass =
     'flex flex-col gap-2 rounded-md border px-3 py-2 font-mono text-[13px] leading-relaxed sm:flex-row sm:items-start sm:gap-3';
-  const changeBodyClass = 'flex min-w-0 flex-1 items-start gap-2';
+  const changeBodyClass = 'flex min-w-0 flex-1 items-center gap-2';
   const renderRemovedRow = (row: Extract<DiffHierarchyChangeRow, { type: 'removed' }>) => {
     const isEditing = isEditingChange(row.changeIndex);
     return (
