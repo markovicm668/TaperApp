@@ -41,6 +41,7 @@ function injectPreviewStyles(html: string): string {
 
 export function ResumePreview({ html, isLoading, error, className }: ResumePreviewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const docResizeObserverRef = useRef<ResizeObserver | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [naturalHeight, setNaturalHeight] = useState(0);
 
@@ -58,12 +59,39 @@ export function ResumePreview({ html, isLoading, error, className }: ResumePrevi
 
   useEffect(() => {
     setNaturalHeight(0);
+    if (docResizeObserverRef.current) {
+      docResizeObserverRef.current.disconnect();
+      docResizeObserverRef.current = null;
+    }
   }, [html]);
+
+  useEffect(() => {
+    return () => {
+      docResizeObserverRef.current?.disconnect();
+      docResizeObserverRef.current = null;
+    };
+  }, []);
 
   const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
     const doc = e.currentTarget.contentDocument;
-    if (doc) {
-      setNaturalHeight(doc.documentElement.scrollHeight);
+    if (!doc) return;
+
+    setNaturalHeight(doc.documentElement.scrollHeight);
+
+    if (docResizeObserverRef.current) {
+      docResizeObserverRef.current.disconnect();
+      docResizeObserverRef.current = null;
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        const h = doc.documentElement.scrollHeight;
+        if (h > 0) {
+          setNaturalHeight(prev => (prev === h ? prev : h));
+        }
+      });
+      ro.observe(doc.documentElement);
+      docResizeObserverRef.current = ro;
     }
   };
 

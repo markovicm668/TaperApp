@@ -335,8 +335,15 @@ export default function ResultsPage() {
       </div>
 
       <section className="w-full" aria-label="Diff View">
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <div className={cn('w-full lg:w-[55%]', mobileTab === 'preview' && 'hidden lg:block')}>
+        <div className="relative flex flex-col gap-6 lg:flex-row">
+          <div
+            className={cn(
+              'w-full lg:w-[55%] lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
+              mobileTab === 'preview' &&
+              'absolute inset-x-0 top-0 -z-10 opacity-0 pointer-events-none'
+            )}
+            aria-hidden={mobileTab === 'preview' ? true : undefined}
+          >
             <DiffView
               hasOriginal={hasOriginal}
               changes={bulletChanges}
@@ -348,7 +355,14 @@ export default function ResultsPage() {
               onPdfToggleItem={handleTogglePdfItem}
             />
           </div>
-          <div className={cn('w-full pt-3 lg:w-[40%]', mobileTab === 'diff' && 'hidden lg:block')}>
+          <div
+            className={cn(
+              'w-full pt-3 lg:w-[40%] lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
+              mobileTab === 'diff' &&
+              'absolute inset-x-0 top-0 -z-10 opacity-0 pointer-events-none'
+            )}
+            aria-hidden={mobileTab === 'diff' ? true : undefined}
+          >
             <div className="sticky top-4">
               <ResumePreview
                 html={preview.html}
@@ -371,7 +385,7 @@ export default function ResultsPage() {
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            Diff View
+            Edditor
           </button>
           <button
             onClick={() => setMobileTab('preview')}
