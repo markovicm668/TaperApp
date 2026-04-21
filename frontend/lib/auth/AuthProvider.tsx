@@ -24,6 +24,7 @@ import {
   hasFirebaseConfig,
 } from '@/lib/firebase/client';
 import { configureApiAuth } from '@/lib/api';
+import { detectInAppBrowser } from '@/lib/auth/detectInAppBrowser';
 
 interface GetIdTokenOptions {
   forceRefresh?: boolean;
@@ -51,6 +52,15 @@ function isPopupBlockedError(error: unknown): boolean {
   );
 }
 
+export class InAppBrowserError extends Error {
+  constructor() {
+    super(
+      'Google sign-in is not supported in this in-app browser. Please open this page in Safari or Chrome.'
+    );
+    this.name = 'InAppBrowserError';
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(
         `Firebase auth is not configured. Missing: ${getMissingFirebaseConfigKeys().join(', ')}. If you just updated .env.local, restart the Next.js dev server.`
       );
+    }
+
+    if (detectInAppBrowser().isInAppBrowser) {
+      throw new InAppBrowserError();
     }
 
     const auth = getFirebaseAuth();

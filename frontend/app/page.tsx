@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
+import { InAppBrowserGate } from '@/components/auth/InAppBrowserGate';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
@@ -30,6 +31,7 @@ export default function LandingPage() {
   const ctaLabel = user ? 'Go to Analyzer' : 'Get Started';
 
   return (
+    <InAppBrowserGate>
     <div className="bg-[linear-gradient(180deg,var(--secondary)_0%,var(--background)_35%,var(--background)_65%,var(--secondary)_80%)] text-foreground">
       {/* Hero */}
       <section className="relative overflow-hidden">
@@ -240,5 +242,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+    </InAppBrowserGate>
   );
 }
