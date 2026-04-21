@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -14,10 +15,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
-import { InAppBrowserGate } from '@/components/auth/InAppBrowserGate';
+import { GateScreen, useInAppBrowser } from '@/components/auth/InAppBrowserGate';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
+  const detection = useInAppBrowser();
+  const [gateOpen, setGateOpen] = useState(false);
 
   if (loading) {
     return (
@@ -27,11 +30,21 @@ export default function LandingPage() {
     );
   }
 
+  if (gateOpen && detection?.isInAppBrowser) {
+    return <GateScreen detection={detection} />;
+  }
+
   const ctaHref = user ? '/analyze' : '/login';
   const ctaLabel = user ? 'Go to Analyzer' : 'Get Started';
 
+  const handleCtaClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (detection?.isInAppBrowser) {
+      event.preventDefault();
+      setGateOpen(true);
+    }
+  };
+
   return (
-    <InAppBrowserGate>
     <div className="bg-[linear-gradient(180deg,var(--secondary)_0%,var(--background)_35%,var(--background)_65%,var(--secondary)_80%)] text-foreground">
       {/* Hero */}
       <section className="relative overflow-hidden">
@@ -49,7 +62,7 @@ export default function LandingPage() {
             compatibility, and generates tailored rewrite suggestions.
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Link href={ctaHref}>
+            <Link href={ctaHref} onClick={handleCtaClick}>
               <Button size="lg" className="gap-2 px-8 text-base">
                 <Zap className="h-4 w-4" />
                 {user ? 'Go to Analyzer' : 'Start Analyzing Free'}
@@ -211,7 +224,7 @@ export default function LandingPage() {
               for your next application.
             </p>
             <div className="mt-8">
-              <Link href={ctaHref}>
+              <Link href={ctaHref} onClick={handleCtaClick}>
                 <Button size="lg" className="gap-2 px-8 text-base">
                   {ctaLabel}
                   <ArrowRight className="h-4 w-4" />
@@ -242,6 +255,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-    </InAppBrowserGate>
   );
 }

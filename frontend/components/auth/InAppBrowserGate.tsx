@@ -49,7 +49,17 @@ async function copyCurrentUrl() {
   }
 }
 
-function GateScreen({ detection }: { detection: InAppBrowserDetection }) {
+export function useInAppBrowser(): InAppBrowserDetection | null {
+  const [detection, setDetection] = useState<InAppBrowserDetection | null>(
+    null
+  );
+  useEffect(() => {
+    setDetection(detectInAppBrowser());
+  }, []);
+  return detection;
+}
+
+export function GateScreen({ detection }: { detection: InAppBrowserDetection }) {
   const appLabel = detection.name ? BROWSER_LABEL[detection.name] : 'this app';
   const primaryLabel =
     detection.platform === 'android' ? 'Open in Chrome' : 'Open in Safari';
