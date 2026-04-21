@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-// 210mm at 96dpi (the A4 width used by Puppeteer and our injected CSS)
+// 210mm x 297mm at 96dpi (the A4 size used by Puppeteer and our injected CSS)
 const NATURAL_WIDTH_PX = Math.round((210 * 96) / 25.4); // 794
+const NATURAL_HEIGHT_PX = Math.round((297 * 96) / 25.4); // 1123
 
 interface ResumePreviewProps {
   html: string | null;
@@ -96,7 +97,7 @@ export function ResumePreview({ html, isLoading, error, className }: ResumePrevi
   };
 
   const scale = containerWidth > 0 ? containerWidth / NATURAL_WIDTH_PX : 1;
-  const scaledHeight = naturalHeight > 0 ? Math.round(naturalHeight * scale) : 0;
+  const scaledHeight = containerWidth > 0 ? Math.round(NATURAL_HEIGHT_PX * scale) : 0;
 
   const showSpinner = isLoading || (previewHtml !== null && naturalHeight === 0);
   const spinnerHeight = scaledHeight > 0 ? scaledHeight : 400;
@@ -144,7 +145,7 @@ export function ResumePreview({ html, isLoading, error, className }: ResumePrevi
               top: 0,
               left: 0,
               width: NATURAL_WIDTH_PX,
-              height: naturalHeight > 0 ? naturalHeight : '100%',
+              height: NATURAL_HEIGHT_PX,
               border: 'none',
               transform: `scale(${scale})`,
               transformOrigin: 'top left',

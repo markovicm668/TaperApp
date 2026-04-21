@@ -16,7 +16,7 @@ export function AppHeader({ creditsRemaining, userName, isAuthenticated = true }
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 flex h-[4.25rem] items-center gap-3 border-b border-border/75 bg-background/88 px-4 backdrop-blur-lg supports-[backdrop-filter]:bg-background/78">
+    <header className="sticky top-0 z-50 flex h-[3.25rem] items-center gap-3 border-b border-border/75 bg-background/88 px-4 backdrop-blur-lg supports-[backdrop-filter]:bg-background/78">
       <div className="flex items-center gap-3">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
