@@ -310,7 +310,7 @@ export function AppNavbar({
                           </ul>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground font-mono">
+                          <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground font-mono">
                             {referralLink}
                           </div>
                           <Button size="sm" className="shrink-0 gap-1.5" onClick={handleCopyReferralLink}>

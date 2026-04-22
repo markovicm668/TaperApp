@@ -491,7 +491,7 @@ export function AppSidebar({
                           </ul>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
+                          <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
                             {referralLink}
                           </div>
                           <Button size="sm" className="shrink-0 gap-1.5" onClick={handleCopyReferralLink}>

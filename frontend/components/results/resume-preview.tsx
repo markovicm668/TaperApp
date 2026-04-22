@@ -22,6 +22,8 @@ function injectPreviewStyles(html: string): string {
     padding: 0 !important;
     box-sizing: border-box;
     overflow: hidden !important;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
   }
   .page, body > * {
     width: 210mm;
