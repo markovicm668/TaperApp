@@ -266,11 +266,11 @@ export default function AnalyzePage() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" onClick={handleReset} disabled={isBusy}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reset
-            </Button>
             <AdminOnly>
+              <Button variant="outline" onClick={handleReset} disabled={isBusy}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset
+              </Button>
               <Button
                 variant="secondary"
                 onClick={handleParseOnly}

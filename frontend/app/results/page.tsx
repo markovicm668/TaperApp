@@ -2,14 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RotateCcw } from 'lucide-react';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
 import { ResumePreview } from '@/components/results/resume-preview';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { Button } from '@/components/ui/button';
-import { ScoreRing } from '@/components/score-ring';
 import { exportResumePdf } from '@/lib/api';
 import { useResumePreview } from '@/lib/resume/use-resume-preview';
 import type { ResumePdfPayload } from '@/lib/types';
@@ -27,7 +26,6 @@ import {
   filterResumePdfPayloadForSelection,
   normalizePdfSelectionOverrides,
   togglePdfSelectionItem,
-  togglePdfSelectionSection,
   type PdfSelectionOverrides,
 } from '@/lib/resume/pdf-selection';
 import { AdminOnly } from '@/components/admin-only';
@@ -115,13 +113,6 @@ export default function ResultsPage() {
       // Ignore session storage write failures and keep in-memory selection state.
     }
   }, [pdfSelectionFingerprint, pdfSelectionModel, pdfSelectionOverrides]);
-
-  const handleTogglePdfSection = (sectionKey: string, checked: boolean) => {
-    if (!pdfSelectionModel) return;
-    setPdfSelectionOverrides(prev =>
-      togglePdfSelectionSection(pdfSelectionModel, prev, sectionKey, checked)
-    );
-  };
 
   const handleTogglePdfItem = (itemKey: string, checked: boolean) => {
     if (!pdfSelectionModel) return;
@@ -267,8 +258,6 @@ export default function ResultsPage() {
     matchScore,
     targetRole,
     company,
-    overallFit,
-    roleSeniority,
   } = analysisResult;
 
   const hasOriginal = sectionRows.some(row => row.hasContent);
@@ -284,61 +273,56 @@ export default function ResultsPage() {
   const preview = useResumePreview(previewPayload);
 
   return (
-    <div className="mx-auto w-full max-w-[1340px] space-y-1">
-      <div className="rounded-2xl border border-border/85 bg-card/92 p-5 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_30px_rgba(15,23,42,0.035)] sm:p-6">
-        <div className="space-y-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-[11px] font-semibold tracking-[0.08em] text-primary/75">Analysis Summary</p>
-              <h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight text-balance sm:text-[2.15rem]">
-                {targetRole} <span className="text-muted-foreground">at</span> {company || 'Target Company'}
-              </h1>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-                Overall fit: <span className="font-medium text-foreground">{overallFit}</span>
-                {' · '}
-                Role seniority: <span className="font-medium text-foreground">{roleSeniority}</span>
-              </p>
-            </div>
-            <div className="w-fit rounded-xl border border-border/80 bg-muted/65 px-4 py-3 text-center md:self-start">
-              <p className="mb-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">Match Score</p>
-              <ScoreRing score={matchScore} size="sm" className="inline-block align-middle" />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end gap-2 md:justify-end">
-            <SectionOrderDialog
-              sections={sectionRows}
-              onOrderChange={setSectionOrder}
-              onResetOrder={() => setSectionOrder([])}
-            />
+    <div className="mx-auto w-full max-w-[1340px]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => router.push('/analyze')}
+            aria-label="Back to analyze"
+            className="inline-flex size-8 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-secondary/70"
+          >
+            <ArrowLeft className="size-[15px]" />
+          </button>
+          <h1 className="truncate font-serif text-xl font-semibold tracking-tight">
+            {targetRole} <span className="font-normal text-muted-foreground/60">at</span> {company || 'Target Company'}
+          </h1>
+          <span className="inline-flex flex-shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+            Match Score&nbsp;&nbsp;{matchScore}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SectionOrderDialog
+            sections={sectionRows}
+            onOrderChange={setSectionOrder}
+            onResetOrder={() => setSectionOrder([])}
+          />
+          <AdminOnly>
             <Button
-              variant="default"
-              onClick={handleDownloadPdf}
-              disabled={isExporting || !hasResumePayload}
+              variant="outline"
+              size="sm"
+              onClick={handleCopyJson}
+              disabled={isCopyingJson || !canonicalParsePayload}
             >
-              {isExporting ? 'Preparing...' : 'Download PDF'}
+              {isCopyingJson ? 'Copying...' : 'Copy JSON'}
             </Button>
-            <AdminOnly>
-              <Button
-                variant="quiet"
-                onClick={handleCopyJson}
-                disabled={isCopyingJson || !canonicalParsePayload}
-              >
-                {isCopyingJson ? 'Copying...' : 'Copy JSON'}
-              </Button>
-            </AdminOnly>
-            <Button variant="outline" onClick={handleReset}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              New Analysis
-            </Button>
-          </div>
+          </AdminOnly>
+          <Button
+            size="sm"
+            onClick={handleDownloadPdf}
+            disabled={isExporting || !hasResumePayload}
+          >
+            {isExporting ? 'Preparing...' : 'Download PDF'}
+          </Button>
         </div>
       </div>
 
       <section className="w-full" aria-label="Diff View">
-        <div className="relative flex flex-col gap-6 lg:flex-row">
+        <div className="relative grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
           <div
             className={cn(
-              'w-full lg:w-[55%] lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
+              'w-full lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
               mobileTab === 'preview' &&
               'absolute inset-x-0 top-0 -z-10 opacity-0 pointer-events-none'
             )}
@@ -351,13 +335,12 @@ export default function ResultsPage() {
               onInlineEdit={applyInlineEdit}
               pdfSelectionModel={pdfSelectionModel}
               pdfSelectionOverrides={pdfSelectionOverrides}
-              onPdfToggleSection={handleTogglePdfSection}
               onPdfToggleItem={handleTogglePdfItem}
             />
           </div>
           <div
             className={cn(
-              'w-full pt-3 lg:w-[40%] lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
+              'w-full lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
               mobileTab === 'diff' &&
               'absolute inset-x-0 top-0 -z-10 opacity-0 pointer-events-none'
             )}

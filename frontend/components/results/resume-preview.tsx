@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-// 210mm at 96dpi (the A4 width used by Puppeteer and our injected CSS)
+// A4 dimensions at 96dpi — same as Puppeteer PDF output (see backend/services/pdfService.js).
 const NATURAL_WIDTH_PX = Math.round((210 * 96) / 25.4); // 794
+// Content-area height per page: 297mm minus 20mm top + 20mm bottom margins (same as Puppeteer).
+const PAGE_CONTENT_HEIGHT_PX = Math.round(((297 - 40) * 96) / 25.4); // 971
 
 interface ResumePreviewProps {
   html: string | null;
@@ -25,13 +27,20 @@ function injectPreviewStyles(html: string): string {
     -webkit-text-size-adjust: 100% !important;
     text-size-adjust: 100% !important;
   }
-  .page, body > * {
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8mm;
+  }
+  .pdf-page {
     width: 210mm;
-    min-height: 297mm;
-    margin: 0 !important;
+    height: 297mm;
     padding: 20mm 15mm !important;
     background: #fff !important;
     box-sizing: border-box;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
   }
 </style>`;
 
@@ -39,6 +48,120 @@ function injectPreviewStyles(html: string): string {
     return html.replace('</head>', `${previewStyle}</head>`);
   }
   return previewStyle + html;
+}
+
+type Atom = {
+  els: HTMLElement[];
+  height: number;
+  sectionSrc: HTMLElement | null;
+};
+
+function paginateDocument(doc: Document): void {
+  const body = doc.body;
+  if (!body || body.querySelector('.pdf-page')) return;
+
+  // Move existing children into an offscreen measurement container sized
+  // like the PDF content area, so offsetHeight reflects the single-column
+  // A4 layout Puppeteer sees.
+  const measure = doc.createElement('div');
+  measure.style.cssText =
+    'width: 210mm; padding: 20mm 15mm; box-sizing: border-box; position: absolute; left: -99999px; top: 0;';
+  while (body.firstChild) measure.appendChild(body.firstChild);
+  body.appendChild(measure);
+
+  // The backend template wraps all content in a single <div class="page"> with
+  // padding:0 — it's an organizational wrapper, not a page boundary. Unwrap it
+  // (any number of levels) so the real top-level content blocks become atoms.
+  let topLevel = Array.from(measure.children) as HTMLElement[];
+  while (
+    topLevel.length > 0 &&
+    topLevel.every(el => el.classList.contains('page'))
+  ) {
+    topLevel = topLevel.flatMap(el => Array.from(el.children) as HTMLElement[]);
+  }
+  if (topLevel.length === 0) {
+    while (measure.firstChild) body.appendChild(measure.firstChild);
+    body.removeChild(measure);
+    return;
+  }
+
+  const getHeight = (el: HTMLElement): number => {
+    const s = doc.defaultView!.getComputedStyle(el);
+    const mt = parseFloat(s.marginTop) || 0;
+    const mb = parseFloat(s.marginBottom) || 0;
+    return el.offsetHeight + mt + mb;
+  };
+
+  const atoms: Atom[] = [];
+  for (const child of topLevel) {
+    if (child.classList.contains('section')) {
+      const sectionChildren = Array.from(child.children) as HTMLElement[];
+      const h2 = sectionChildren.find(c => c.tagName === 'H2') ?? null;
+      const items = h2 ? sectionChildren.filter(c => c !== h2) : sectionChildren;
+      if (h2 && items.length > 0) {
+        // Keep section heading with its first item to avoid orphaned headings.
+        atoms.push({
+          els: [h2, items[0]],
+          height: getHeight(h2) + getHeight(items[0]),
+          sectionSrc: child,
+        });
+        for (let i = 1; i < items.length; i++) {
+          atoms.push({
+            els: [items[i]],
+            height: getHeight(items[i]),
+            sectionSrc: child,
+          });
+        }
+      } else if (sectionChildren.length > 0) {
+        for (const c of sectionChildren) {
+          atoms.push({ els: [c], height: getHeight(c), sectionSrc: child });
+        }
+      } else {
+        atoms.push({ els: [child], height: getHeight(child), sectionSrc: null });
+      }
+    } else {
+      atoms.push({ els: [child], height: getHeight(child), sectionSrc: null });
+    }
+  }
+
+  // Pack atoms into pages without splitting any atom across a page boundary.
+  const pages: Atom[][] = [[]];
+  let curH = 0;
+  for (const atom of atoms) {
+    if (curH + atom.height > PAGE_CONTENT_HEIGHT_PX && pages[pages.length - 1].length > 0) {
+      pages.push([]);
+      curH = 0;
+    }
+    pages[pages.length - 1].push(atom);
+    curH += atom.height;
+  }
+
+  const fragment = doc.createDocumentFragment();
+  for (const pageAtoms of pages) {
+    const pageDiv = doc.createElement('div');
+    pageDiv.className = 'pdf-page';
+    let currentSection: HTMLElement | null = null;
+    let currentSectionSrc: HTMLElement | null = null;
+    for (const atom of pageAtoms) {
+      if (atom.sectionSrc) {
+        if (currentSectionSrc !== atom.sectionSrc) {
+          currentSection = doc.createElement('div');
+          currentSection.className = atom.sectionSrc.className;
+          pageDiv.appendChild(currentSection);
+          currentSectionSrc = atom.sectionSrc;
+        }
+        for (const el of atom.els) currentSection!.appendChild(el);
+      } else {
+        currentSection = null;
+        currentSectionSrc = null;
+        for (const el of atom.els) pageDiv.appendChild(el);
+      }
+    }
+    fragment.appendChild(pageDiv);
+  }
+
+  body.innerHTML = '';
+  body.appendChild(fragment);
 }
 
 export function ResumePreview({ html, isLoading, error, className }: ResumePreviewProps) {
@@ -78,6 +201,7 @@ export function ResumePreview({ html, isLoading, error, className }: ResumePrevi
     const doc = e.currentTarget.contentDocument;
     if (!doc) return;
 
+    paginateDocument(doc);
     setNaturalHeight(doc.documentElement.scrollHeight);
 
     if (docResizeObserverRef.current) {

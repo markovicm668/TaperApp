@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Edit3 } from 'lucide-react';
 import type { BulletChange } from '@/lib/types';
 import type { SectionViewModelRow } from '@/lib/resume/mappers';
@@ -41,7 +41,6 @@ interface DiffViewProps {
   onInlineEdit?: (target: ResumeInlineEditTarget, text: string) => void;
   pdfSelectionModel?: PdfSelectionModel | null;
   pdfSelectionOverrides?: PdfSelectionOverrides;
-  onPdfToggleSection?: (sectionKey: string, checked: boolean) => void;
   onPdfToggleItem?: (itemKey: string, checked: boolean) => void;
 }
 
@@ -121,24 +120,44 @@ function TriStateCheckbox({
   ariaLabel: string;
   onChange?: (checked: boolean) => void;
 }) {
-  const ref = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.indeterminate = state === 'indeterminate';
-  }, [state]);
+  const isChecked = state === 'checked';
+  const isIndeterminate = state === 'indeterminate';
+  const filled = isChecked || isIndeterminate;
 
   return (
-    <input
-      ref={ref}
-      type="checkbox"
-      className="mt-0.5 h-4 w-4 cursor-pointer rounded border border-gray-800 accent-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
-      checked={state === 'checked'}
-      disabled={disabled}
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={isIndeterminate ? 'mixed' : isChecked}
       aria-label={ariaLabel}
-      onChange={event => onChange?.(event.target.checked)}
-      onClick={event => event.stopPropagation()}
-    />
+      disabled={disabled}
+      onClick={event => {
+        event.stopPropagation();
+        if (disabled) return;
+        onChange?.(!isChecked);
+      }}
+      className={cn(
+        'inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-[1.5px] p-0 transition-colors',
+        filled ? 'border-primary bg-primary' : 'border-[#c7d0df] bg-white',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+      )}
+    >
+      {isChecked && (
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+      {isIndeterminate && <span className="block h-[2px] w-[10px] rounded-full bg-white" />}
+    </button>
   );
 }
 
@@ -526,10 +545,13 @@ export function DiffView({
   onInlineEdit,
   pdfSelectionModel = null,
   pdfSelectionOverrides = {},
-  onPdfToggleSection,
   onPdfToggleItem,
 }: DiffViewProps) {
   const targetRole = useTargetRole();
+  const normalizedTargetRole = useMemo(
+    () => normalizeLineForMatch(targetRole || ''),
+    [targetRole],
+  );
   const [localChanges, setLocalChanges] = useState<BulletChange[]>(changes);
   const [activeEdit, setActiveEdit] = useState<ActiveEditState | null>(null);
   const [draftText, setDraftText] = useState('');
@@ -567,6 +589,16 @@ export function DiffView({
         consumedKeys.add(sectionKey);
 
         const sectionChanges = changesBySection.get(sectionKey) || [];
+
+        // Skip canonical sections that have no content in the resume and no changes.
+        // The `header` section is always rendered because it represents basic info.
+        if (
+          section.kind !== 'header' &&
+          section.itemKeys.length === 0 &&
+          sectionChanges.length === 0
+        ) {
+          return;
+        }
         const updatedLines: string[] = [];
         let lastSkillCategory: string | null | undefined = undefined;
         section.itemKeys.forEach(itemKey => {
@@ -610,12 +642,22 @@ export function DiffView({
         });
 
         const rows = buildSectionRows(updatedLines, sectionChanges);
+        let extraChangeCount = 0;
+        if (section.kind === 'header' && normalizedTargetRole) {
+          const titleUpdatedByAi = section.itemKeys.some(itemKey => {
+            if (itemKey !== 'item:header:title') return false;
+            const item = pdfSelectionModel.items[itemKey];
+            return !!item && normalizeLineForMatch(item.label || '') === normalizedTargetRole;
+          });
+          if (titleUpdatedByAi) extraChangeCount += 1;
+        }
+        const totalChangeCount = sectionChanges.length + extraChangeCount;
         mappedSections.push({
           id: sectionId,
           title: section.title,
           kind: section.kind,
-          changed: sectionChanges.length > 0,
-          changeCount: sectionChanges.length,
+          changed: totalChangeCount > 0,
+          changeCount: totalChangeCount,
           rows,
         });
       });
@@ -635,7 +677,7 @@ export function DiffView({
     }
 
     return [...mappedSections, ...unmappedSections];
-  }, [localChanges, pdfSelectionModel]);
+  }, [localChanges, pdfSelectionModel, normalizedTargetRole]);
 
   useEffect(() => {
     if (sectionModels.length === 0) {
@@ -644,9 +686,23 @@ export function DiffView({
     }
 
     setExpandedSections(prev => {
-      const validIds = new Set(sectionModels.map(section => section.id));
+      const validIds = new Set<string>();
+      sectionModels.forEach(section => {
+        validIds.add(section.id);
+        if (section.kind === 'header') {
+          validIds.add(`${section.id}:target-title`);
+        }
+      });
+
       if (prev === null) {
-        return new Set(sectionModels.filter(s => s.changeCount > 0).map(s => s.id));
+        const defaults = new Set<string>();
+        sectionModels.forEach(section => {
+          if (section.changeCount > 0) defaults.add(section.id);
+          if (section.kind === 'header') {
+            defaults.add(`${section.id}:target-title`);
+          }
+        });
+        return defaults;
       }
 
       const next = new Set<string>();
@@ -703,8 +759,18 @@ export function DiffView({
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
-      const next =
-        prev === null ? new Set(sectionModels.map(section => section.id)) : new Set(prev);
+      let next: Set<string>;
+      if (prev === null) {
+        next = new Set<string>();
+        sectionModels.forEach(section => {
+          next.add(section.id);
+          if (section.kind === 'header') {
+            next.add(`${section.id}:target-title`);
+          }
+        });
+      } else {
+        next = new Set(prev);
+      }
       if (next.has(sectionId)) {
         next.delete(sectionId);
       } else {
@@ -949,7 +1015,7 @@ export function DiffView({
     const isEditing = isEditingChange(row.changeIndex);
     return (
       <div key={row.id} className="my-1">
-        <div className={cn(changeLineClass, 'border-destructive/20 border-l-4 bg-destructive/[0.05]')}>
+        <div className={cn(changeLineClass, 'border-destructive/25 border-l-4 bg-destructive/[0.03]')}>
           <div className={changeBodyClass}>
             {isEditing ? (
               <div className="min-w-0 flex-1">
@@ -969,7 +1035,7 @@ export function DiffView({
               </div>
             ) : (
               <>
-                <span className="min-w-0 flex-1 whitespace-pre-wrap text-destructive/85">{row.text}</span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground line-through decoration-destructive/30">{row.text}</span>
                 <Button
                   variant="quiet"
                   size="icon"
@@ -990,7 +1056,7 @@ export function DiffView({
     const isEditing = isEditingChange(row.changeIndex);
     return (
       <div key={row.id} className="my-1">
-        <div className={cn(changeLineClass, 'border-success/20 border-l-4 bg-success/[0.05]')}>
+        <div className={cn(changeLineClass, 'border-primary/25 border-l-4 bg-primary/[0.03]')}>
           <div className={changeBodyClass}>
             {isEditing ? (
               <div className="min-w-0 flex-1">
@@ -1010,7 +1076,7 @@ export function DiffView({
               </div>
             ) : (
               <>
-                <span className="min-w-0 flex-1 whitespace-pre-wrap text-success/90">{row.text}</span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap font-medium text-foreground/80">{row.text}</span>
                 <Button
                   variant="quiet"
                   size="icon"
@@ -1032,13 +1098,13 @@ export function DiffView({
     return (
       <div key={row.id} className="my-1">
         <div className="overflow-hidden rounded-md border border-border/70 bg-background/70">
-          <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-destructive/45 bg-destructive/[0.04]')}>
+          <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-destructive/45 bg-destructive/[0.03]')}>
             <div className={changeBodyClass}>
-              <span className="min-w-0 flex-1 whitespace-pre-wrap text-destructive/85">{row.original}</span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground line-through decoration-destructive/30">{row.original}</span>
             </div>
           </div>
           <div className="border-t border-border/60" />
-          <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-success/45 bg-success/[0.04]')}>
+          <div className={cn(changeLineClass, 'rounded-none border-0 border-l-4 border-primary/45 bg-primary/[0.03]')}>
             <div className={changeBodyClass}>
               {isEditing ? (
                 <div className="min-w-0 flex-1">
@@ -1058,7 +1124,7 @@ export function DiffView({
                 </div>
               ) : (
                 <>
-                  <span className="min-w-0 flex-1 whitespace-pre-wrap text-success/90">{row.improved}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap font-medium text-foreground/80">{row.improved}</span>
                   <Button
                     variant="quiet"
                     size="icon"
@@ -1084,6 +1150,74 @@ export function DiffView({
           ? renderRemovedRow(row)
           : renderModifiedRow(row);
     return renderSelectableWrapper(row.id, content, itemKey);
+  };
+
+  const renderSkillPill = (row: DiffHierarchyContentRow, itemKey?: string) => {
+    const label = row.type === 'modified' ? row.improved : row.text;
+    const state: CheckState = itemKey ? getItemCheckState(itemKey) : 'checked';
+    const isChecked = state === 'checked';
+    const isSuggested = row.type === 'added' || row.type === 'modified';
+    const isRemoved = row.type === 'removed';
+    const inlineTarget = resolveInlineTargetFromItemKey(itemKey);
+    const isEditing = isEditingInlineTarget(inlineTarget);
+
+    if (isEditing && inlineTarget) {
+      return (
+        <div key={row.id} className="w-full">
+          <Textarea
+            value={draftText}
+            onChange={event => setDraftText(event.target.value)}
+            className="min-h-[60px] bg-background font-mono text-sm"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" onClick={saveEditing}>
+              Save
+            </Button>
+            <Button variant="ghost" size="sm" onClick={cancelEditing}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    const pillClass = cn(
+      'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px] transition-colors',
+      isSuggested
+        ? 'border-success/35 bg-success/[0.08] text-success'
+        : isRemoved
+          ? 'border-destructive/35 bg-destructive/[0.06]'
+          : 'border-border bg-background text-foreground/85',
+      !isChecked && 'opacity-55'
+    );
+
+    const labelClass = cn(
+      'whitespace-nowrap text-left',
+      isRemoved && 'text-muted-foreground line-through decoration-destructive/40',
+      isSuggested && 'font-medium',
+      inlineTarget ? 'cursor-text' : 'cursor-default'
+    );
+
+    return (
+      <div key={row.id} className={pillClass}>
+        {itemKey ? (
+          <TriStateCheckbox
+            state={state}
+            ariaLabel={`Include ${label} in PDF`}
+            onChange={checked => onPdfToggleItem?.(itemKey, checked)}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={() => inlineTarget && startInlineEditing(inlineTarget, label)}
+          disabled={!inlineTarget}
+          title={inlineTarget ? `Edit ${label}` : label}
+          className={labelClass}
+        >
+          {label}
+        </button>
+      </div>
+    );
   };
 
   const renderContentRow = (
@@ -1198,6 +1332,75 @@ export function DiffView({
     </div>
   );
 
+  const renderSectionBadge = (label: string) => (
+    <span className="rounded-[5px] bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-primary">
+      {label}
+    </span>
+  );
+
+  const renderRewritesBadge = (count: number) =>
+    count > 0
+      ? renderSectionBadge(`${count} ${count === 1 ? 'Rewrite suggestion' : 'Rewrite suggestions'}`)
+      : null;
+
+  const renderHeaderPill = (item: HeaderDisplayItem) => {
+    const state = getItemCheckState(item.itemKey);
+    const included = state === 'checked';
+    const inlineTarget = resolveInlineTargetFromItemKey(item.itemKey);
+    const isEditing = isEditingInlineTarget(inlineTarget);
+    const isTitle = item.kind === 'title';
+    const isTitleUpdatedByAi = isTitle && !!targetRole && item.label === targetRole;
+
+    if (isEditing && inlineTarget) {
+      return (
+        <div key={item.itemKey} className="w-full">
+          <Textarea
+            value={draftText}
+            onChange={event => setDraftText(event.target.value)}
+            className="min-h-[72px] bg-background font-mono text-sm"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" onClick={saveEditing}>
+              Save
+            </Button>
+            <Button variant="ghost" size="sm" onClick={cancelEditing}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={item.itemKey}
+        className={cn(
+          'inline-flex max-w-full items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 transition',
+          included ? 'border-border/80 bg-background' : 'border-border/40 bg-muted/50 opacity-60'
+        )}
+      >
+        <TriStateCheckbox
+          state={state}
+          ariaLabel={`Include ${item.label || 'item'} in PDF`}
+          onChange={checked => onPdfToggleItem?.(item.itemKey, checked)}
+        />
+        <button
+          type="button"
+          onClick={() => inlineTarget && startInlineEditing(inlineTarget, item.label)}
+          disabled={!inlineTarget}
+          title={item.label}
+          className={cn(
+            'max-w-[240px] truncate text-left text-[13px] leading-tight',
+            isTitleUpdatedByAi ? 'font-medium text-primary' : 'text-foreground/90',
+            inlineTarget ? 'cursor-text' : 'cursor-default'
+          )}
+        >
+          {item.label}
+        </button>
+      </div>
+    );
+  };
+
   const renderHierarchyBlock = (
     block: DiffHierarchyBlock,
     selectionContext: SectionSelectionContext | null,
@@ -1222,7 +1425,7 @@ export function DiffView({
           : isTitle
             ? cn(
                 'text-sm font-medium leading-relaxed sm:text-base',
-                isTitleUpdatedByAi ? 'text-success' : 'text-foreground/85'
+                isTitleUpdatedByAi ? 'text-primary' : 'text-foreground/85'
               )
             : 'text-sm leading-relaxed text-foreground break-words';
 
@@ -1340,7 +1543,7 @@ export function DiffView({
                   textClassName: cn(
                     'text-sm font-medium',
                     targetRole && block.titleRow.text === targetRole
-                      ? 'text-success'
+                      ? 'text-primary'
                       : 'text-foreground/85'
                   ),
                 })
@@ -1348,7 +1551,7 @@ export function DiffView({
                   <p className={cn(
                     'text-sm font-medium',
                     targetRole && block.title === targetRole
-                      ? 'text-success'
+                      ? 'text-primary'
                       : 'text-foreground/85'
                   )}>{block.title}</p>
                 )}
@@ -1569,11 +1772,10 @@ export function DiffView({
             </div>
           )}
           <div className="mt-2 pl-2 sm:pl-4">
-            <div className="space-y-1">
+            <div className="flex flex-wrap gap-1.5">
               {block.rows.map(row =>
-                renderContentRow(
+                renderSkillPill(
                   row,
-                  'bullet',
                   selectionContext
                     ? consumeSkillItemKey(selectionContext.skillItemKeys, row, pdfSelectionModel)
                     : undefined
@@ -1615,6 +1817,22 @@ export function DiffView({
             ? selectionContext.languageItemKeys
             : selectionContext.customLineItemKeys
         : undefined;
+
+      if (isSkills) {
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {block.rows.map(row =>
+              renderSkillPill(
+                row,
+                itemKeyQueue?.length
+                  ? consumeSkillItemKey(itemKeyQueue, row, pdfSelectionModel)
+                  : undefined
+              )
+            )}
+          </div>
+        );
+      }
+
       return (
         <div className="space-y-1">
           {block.rows.map(row =>
@@ -1622,9 +1840,7 @@ export function DiffView({
               row,
               neutralVariant,
               itemKeyQueue?.length
-                ? isSkills
-                  ? consumeSkillItemKey(itemKeyQueue, row, pdfSelectionModel)
-                  : consumeSequentialItemKey(itemKeyQueue, row)
+                ? consumeSequentialItemKey(itemKeyQueue, row)
                 : undefined
             )
           )}
@@ -1634,17 +1850,17 @@ export function DiffView({
 
     return (
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {/* <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           Additional changed lines
-        </p>
+        </p> */}
         <div className="space-y-1">{block.rows.map(row => renderChangeRow(row))}</div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-2 p-3">
-      {sectionModels.length === 0 && (
+    <div className="p-3">
+      {sectionModels.length === 0 ? (
         <Card className="border-border/85 bg-card/92">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Updated Resume Preview</CardTitle>
@@ -1658,71 +1874,186 @@ export function DiffView({
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : (
+        <div className="rounded-2xl border border-border/85 bg-card/92 px-5 shadow-[0_1px_1px_rgba(15,23,42,0.05)] sm:px-6">
+          {sectionModels.map(section => {
+            const isExpanded = expandedSections === null ? true : expandedSections.has(section.id);
+            const hierarchyBlocks = buildHierarchicalSectionBlocks(section.kind, section.rows);
+            const selectionContext = createSectionSelectionContext(section.id, pdfSelectionModel);
+            const hasSectionSelection = Boolean(pdfSelectionModel?.sections[section.id]);
+            const sectionState = hasSectionSelection ? getSectionCheckState(section.id) : 'checked';
 
-      {sectionModels.map(section => {
-        const isExpanded = expandedSections === null ? true : expandedSections.has(section.id);
-        const hierarchyBlocks = buildHierarchicalSectionBlocks(section.kind, section.rows);
-        const selectionContext = createSectionSelectionContext(section.id, pdfSelectionModel);
-        const hasSectionSelection = Boolean(pdfSelectionModel?.sections[section.id]);
-        const sectionState = hasSectionSelection ? getSectionCheckState(section.id) : 'checked';
-        const sectionSummary =
-          section.changeCount > 0
-            ? `${section.changeCount} highlighted change${section.changeCount === 1 ? '' : 's'} in this section.`
-            : 'No highlighted changes in this section.';
-        return (
-          <Card key={section.id} className="border-border/85 bg-card/92 py-2 gap-2">
-            <CardHeader className="px-4">
-              <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <TriStateCheckbox
-                    state={sectionState}
-                    disabled={!hasSectionSelection}
-                    ariaLabel={`Include ${section.title} in PDF`}
-                    onChange={checked => onPdfToggleSection?.(section.id, checked)}
-                  />
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    onClick={() => toggleSection(section.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                    )}
-                    <div className={cn('min-w-0', sectionState === 'unchecked' && 'opacity-60')}>
-                      <CardTitle className="text-base">{section.title}</CardTitle>
-                      <CardDescription>{sectionSummary}</CardDescription>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            {isExpanded && (
-              <CardContent className="px-3 pb-0">
-                <div className="rounded-xl border border-border/85 bg-muted/22 p-2.5">
-                  <div className={cn('space-y-0', sectionState === 'unchecked' && 'opacity-65')}>
-                    {section.kind === 'custom' ? (
-                      <div className="py-1">{renderCustomSectionRows(section, selectionContext)}</div>
-                    ) : (
-                      hierarchyBlocks.map((block, index) => (
-                        <div
-                          key={`${section.id}-${block.id}`}
-                          className={cn('py-2 first:pt-0 last:pb-0', index > 0 && 'border-t border-border/70')}
-                        >
-                          {renderHierarchyBlock(block, selectionContext, section.kind)}
+            if (section.kind === 'header') {
+              const orderedItems = buildOrderedHeaderDisplayItems(
+                selectionContext?.headerItemKeys || [],
+                pdfSelectionModel
+              );
+              const titleItem = orderedItems.find(item => item.kind === 'title');
+              const otherItems = orderedItems.filter(item => item.kind !== 'title');
+
+              if (titleItem) {
+                const targetTitleId = `${section.id}:target-title`;
+                const targetTitleExpanded =
+                  expandedSections === null ? true : expandedSections.has(targetTitleId);
+                const titleIsAiUpdated = Boolean(targetRole && titleItem.label === targetRole);
+                const contactChangeCount = Math.max(
+                  0,
+                  section.changeCount - (titleIsAiUpdated ? 1 : 0)
+                );
+                const headerBlock = hierarchyBlocks.find(block => block.type === 'header');
+                const headerChanges =
+                  headerBlock && headerBlock.type === 'header' ? headerBlock.changes : [];
+
+                const titleState = getItemCheckState(titleItem.itemKey);
+                const contactStates = otherItems.map(item => getItemCheckState(item.itemKey));
+                const contactAllChecked =
+                  contactStates.length > 0 && contactStates.every(s => s === 'checked');
+                const contactAllUnchecked =
+                  contactStates.length === 0 || contactStates.every(s => s === 'unchecked');
+                const contactState: CheckState = contactAllChecked
+                  ? 'checked'
+                  : contactAllUnchecked
+                    ? 'unchecked'
+                    : 'indeterminate';
+                return (
+                  <Fragment key={section.id}>
+                    <div className="border-b border-border/60">
+                      <div className="flex w-full flex-wrap items-center justify-between gap-2 py-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={() => toggleSection(section.id)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            )}
+                            <div className={cn('flex min-w-0 items-center gap-2', contactState === 'unchecked' && 'opacity-60')}>
+                              <CardTitle className="text-base">Contact Information</CardTitle>
+                              {renderRewritesBadge(contactChangeCount)}
+                            </div>
+                          </button>
                         </div>
-                      ))
-                    )}
+                      </div>
+                      {isExpanded && (
+                        <div className="pb-4">
+                          <div
+                            className={cn(
+                              'space-y-3',
+                              contactState === 'unchecked' && 'opacity-65'
+                            )}
+                          >
+                            {otherItems.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {otherItems.map(item => renderHeaderPill(item))}
+                              </div>
+                            )}
+                            {headerChanges.length > 0 && (
+                              <div className="space-y-1">
+                                {headerChanges.map(row => renderChangeRow(row))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="border-b border-border/60 last:border-b-0">
+                      <div className="flex w-full flex-wrap items-center justify-between gap-2 py-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <button
+                            type="button"
+                            aria-expanded={targetTitleExpanded}
+                            onClick={() => toggleSection(targetTitleId)}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            {targetTitleExpanded ? (
+                              <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            )}
+                            <div className={cn('flex min-w-0 items-center gap-2', titleState === 'unchecked' && 'opacity-60')}>
+                              <CardTitle className="text-base">Target Title</CardTitle>
+                              {titleIsAiUpdated && renderSectionBadge('Suggested')}
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                      {targetTitleExpanded && (
+                        <div className="pb-4">
+                          <div
+                            className={cn(
+                              'flex flex-wrap items-center gap-2',
+                              titleState === 'unchecked' && 'opacity-65'
+                            )}
+                          >
+                            {renderHeaderPill(titleItem)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
+                );
+              }
+            }
+
+            return (
+              <div
+                key={section.id}
+                className="border-b border-border/60 last:border-b-0"
+              >
+                <div className="flex w-full flex-wrap items-center justify-between gap-2 py-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      onClick={() => toggleSection(section.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      )}
+                      <div className={cn('flex min-w-0 items-center gap-2', sectionState === 'unchecked' && 'opacity-60')}>
+                        <CardTitle className="text-base">{section.title}</CardTitle>
+                        {section.kind === 'summary'
+                          ? section.changeCount > 0 && renderSectionBadge('Suggested')
+                          : section.kind === 'skills'
+                            ? section.changeCount > 0 &&
+                              renderSectionBadge(
+                                `${section.changeCount} ${section.changeCount === 1 ? 'Suggestion' : 'Suggestions'}`
+                              )
+                            : renderRewritesBadge(section.changeCount)}
+                      </div>
+                    </button>
                   </div>
                 </div>
-              </CardContent>
-            )}
-          </Card>
-        );
-      })}
+                {isExpanded && (
+                  <div className="pb-4">
+                    <div className={cn('space-y-0', sectionState === 'unchecked' && 'opacity-65')}>
+                      {section.kind === 'custom' ? (
+                        <div className="py-1">{renderCustomSectionRows(section, selectionContext)}</div>
+                      ) : (
+                        hierarchyBlocks.map((block, index) => (
+                          <div
+                            key={`${section.id}-${block.id}`}
+                            className={cn('py-2 first:pt-0 last:pb-0', index > 0 && 'border-t border-border/70')}
+                          >
+                            {renderHierarchyBlock(block, selectionContext, section.kind)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

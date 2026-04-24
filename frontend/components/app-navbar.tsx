@@ -309,11 +309,15 @@ export function AppNavbar({
                             </li>
                           </ul>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                           <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground font-mono">
                             {referralLink}
                           </div>
-                          <Button size="sm" className="shrink-0 gap-1.5" onClick={handleCopyReferralLink}>
+                          <Button
+                            size="sm"
+                            className="w-full shrink-0 gap-1.5 sm:w-auto"
+                            onClick={handleCopyReferralLink}
+                          >
                             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                             {copied ? 'Copied!' : 'Copy link'}
                           </Button>

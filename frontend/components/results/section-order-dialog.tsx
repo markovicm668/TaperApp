@@ -148,7 +148,8 @@ export function SectionOrderDialog({
   return (
     <>
       <Button
-        variant="quiet"
+        variant="outline"
+        size="sm"
         onClick={() => setOpen(true)}
         disabled={!hasVisibleSections}
       >
