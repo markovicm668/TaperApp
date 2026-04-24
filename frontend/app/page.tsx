@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
 import { GateScreen, useInAppBrowser } from '@/components/auth/InAppBrowserGate';
+import { track } from '@/lib/analytics';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
@@ -38,6 +39,10 @@ export default function LandingPage() {
   const ctaLabel = user ? 'Go to Analyzer' : 'Get Started';
 
   const handleCtaClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    track('landing_cta_clicked', {
+      authed: Boolean(user),
+      destination: ctaHref,
+    });
     if (detection?.isInAppBrowser) {
       event.preventDefault();
       setGateOpen(true);
@@ -58,7 +63,7 @@ export default function LandingPage() {
             <span className="text-primary">perfectly tailored</span> resume
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Upload or paste resume and a job description. Our AI analyzes keyword gaps, ATS
+            Upload your resume and a job description. Our algorithm analyzes keyword gaps, ATS
             compatibility, and generates tailored rewrite suggestions.
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -116,7 +121,7 @@ export default function LandingPage() {
               },
               {
                 icon: Sparkles,
-                title: 'AI Rewrite Suggestions',
+                title: 'Rewrite Suggestions',
                 desc: 'Receive tailored bullet-point rewrites that incorporate missing keywords naturally.',
               },
             ].map((f) => (
@@ -161,7 +166,7 @@ export default function LandingPage() {
                 step: '02',
                 icon: ScanSearch,
                 title: 'Add the Job Description',
-                desc: 'Paste the job listing you want to apply for. Our AI cross-references every requirement.',
+                desc: 'Paste the job listing you want to apply for. Our system cross-references every requirement.',
               },
               {
                 step: '03',

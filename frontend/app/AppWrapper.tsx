@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/app-header';
 import { AppNavbar } from '@/components/app-navbar';
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth/useAuth';
 import { ResumeProvider } from '@/lib/resume/ResumeProvider';
 import { TokenProvider, useTokens } from '@/lib/tokens/TokenContext';
 import type { User } from '@/lib/types';
+import { identifyUser, initAnalytics, resetAnalytics } from '@/lib/analytics';
 
 function mapAuthUserToAppUser(params: { name: string; email: string; creditsRemaining: number }): User {
   return {
@@ -39,6 +40,25 @@ function AuthShell({ children }: { children: ReactNode }) {
   const isLoginPage = pathname === '/login';
   const isLandingPage = pathname === '/';
   const isPublicPage = isLoginPage || isLandingPage || pathname === '/terms' || pathname === '/privacy';
+
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
+  const lastIdentifiedUid = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    if (user && user.uid !== lastIdentifiedUid.current) {
+      identifyUser(user.uid, {
+        $email: user.email || undefined,
+        $name: user.displayName || undefined,
+      });
+      lastIdentifiedUid.current = user.uid;
+    } else if (!user && lastIdentifiedUid.current) {
+      resetAnalytics();
+      lastIdentifiedUid.current = null;
+    }
+  }, [loading, user]);
 
   useEffect(() => {
     const ref = searchParams.get('ref');

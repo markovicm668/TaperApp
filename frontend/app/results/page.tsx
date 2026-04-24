@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ import {
   useEffectiveSectionViewModel,
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
+import { track } from '@/lib/analytics';
 import {
   buildPdfSelectionModel,
   filterResumePdfPayloadForSelection,
@@ -51,6 +52,17 @@ export default function ResultsPage() {
       router.push('/analyze');
     }
   }, [analysisResult, isHydrated, router]);
+
+  const resultsViewedRef = useRef(false);
+  useEffect(() => {
+    if (!analysisResult || resultsViewedRef.current) return;
+    if (analysisResult.status === 'failed') return;
+    resultsViewedRef.current = true;
+    track('results_viewed', {
+      match_score: analysisResult.matchScore,
+      target_role: analysisResult.targetRole || null,
+    });
+  }, [analysisResult]);
 
   const exportResumePayload = useExportPayload();
   const pdfSelectionModel = useMemo(
@@ -174,10 +186,15 @@ export default function ResultsPage() {
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 100);
       }
+      track('resume_exported', {
+        match_score: analysisResult.matchScore,
+        target_role: targetRole || null,
+      });
       toast.success('PDF downloaded');
     } catch (error) {
       iosWindowRef?.close();
       const message = error instanceof Error ? error.message : 'Unknown error.';
+      track('resume_export_failed', { error: message });
       toast.error('PDF export failed', { description: message });
     } finally {
       setIsExporting(false);

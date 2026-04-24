@@ -1,23 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Chrome } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
 import { GoogleOneTap } from '@/components/auth/GoogleOneTap';
 import { InAppBrowserGate } from '@/components/auth/InAppBrowserGate';
+import { track } from '@/lib/analytics';
 
 export default function LoginPage() {
   const { signInWithGoogle, loading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    track('login_page_viewed');
+  }, []);
+
   const handleSignIn = async () => {
     try {
       setIsSubmitting(true);
+      track('signin_started', { method: 'google' });
       await signInWithGoogle();
+      track('signin_completed', { method: 'google' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sign-in failed.';
+      track('signin_failed', { method: 'google', error: message });
       toast.error('Unable to sign in', { description: message });
     } finally {
       setIsSubmitting(false);

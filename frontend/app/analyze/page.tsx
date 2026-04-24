@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Zap, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAdmin } from '@/lib/auth/useAdmin';
 import { useTokens } from '@/lib/tokens/TokenContext';
+import { track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 export default function AnalyzePage() {
@@ -45,6 +46,34 @@ export default function AnalyzePage() {
   const canParseOnly = Boolean(resumeData);
   const isBusy = isAnalyzing || isParsingOnly;
 
+  const trackedResumeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!resumeData) {
+      trackedResumeIdRef.current = null;
+      return;
+    }
+    const id = `${resumeData.type}:${resumeData.fileName || ''}:${resumeData.content.length}`;
+    if (trackedResumeIdRef.current === id) return;
+    trackedResumeIdRef.current = id;
+    track('resume_uploaded', {
+      input_type: resumeData.type,
+      has_file: Boolean(resumeData.file),
+      file_name: resumeData.fileName || null,
+      char_count: resumeData.content.length,
+    });
+  }, [resumeData]);
+
+  const jdTrackedRef = useRef(false);
+  useEffect(() => {
+    const len = jobDescription.trim().length;
+    if (len > 50 && !jdTrackedRef.current) {
+      jdTrackedRef.current = true;
+      track('job_description_added', { char_count: len });
+    } else if (len === 0 && jdTrackedRef.current) {
+      jdTrackedRef.current = false;
+    }
+  }, [jobDescription]);
+
   const tryNavigateToResults = useCallback(() => {
     if (apiDoneRef.current && progressDoneRef.current) {
       setIsAnalyzing(false);
@@ -61,6 +90,12 @@ export default function AnalyzePage() {
     progressDoneRef.current = false;
     apiErrorRef.current = false;
     setIsAnalyzing(true);
+    const analysisStartedAt = Date.now();
+    track('analysis_started', {
+      input_type: resumeData.type,
+      has_file: Boolean(resumeData.file),
+      jd_char_count: jobDescription.trim().length,
+    });
 
     setSourceInput({
       inputType: resumeData.type,
@@ -106,10 +141,16 @@ export default function AnalyzePage() {
       };
 
       setAnalysisSnapshot(analysisResultToSnapshot(resultWithSource));
+      track('analysis_completed', {
+        match_score: result.matchScore,
+        duration_ms: Date.now() - analysisStartedAt,
+        target_role: result.targetRole || null,
+      });
       apiDoneRef.current = true;
       tryNavigateToResults();
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'INSUFFICIENT_TOKENS') {
+        track('analysis_failed', { reason: 'insufficient_tokens' });
         toast.error('Insufficient tokens', {
           description: (err as unknown as Error).message,
         });
@@ -119,6 +160,7 @@ export default function AnalyzePage() {
       }
 
       const errorMessage = err instanceof Error ? err.message : 'Unknown API error occurred.';
+      track('analysis_failed', { reason: 'api_error', error: errorMessage });
       console.error('Analysis API Error:', errorMessage, err);
 
       const errorResult: AnalysisResult = {
