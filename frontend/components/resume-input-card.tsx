@@ -1,11 +1,9 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { FileText, Sparkles, FileUp, X } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Check, Clipboard, FileText, FileUp, Sparkles, Upload, X } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { sampleResume } from '@/lib/api';
 import { AdminOnly } from '@/components/admin-only';
 
@@ -115,20 +113,24 @@ export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
     [onResumeChange, pastedText, selectedFile]
   );
 
+  const wordCount = pastedText.trim() ? pastedText.trim().split(/\s+/).length : 0;
+
   return (
-    <Card className="flex h-full flex-col border-border/85 bg-card/92 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_28px_rgba(15,23,42,0.035)]">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1.5">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
-                <FileText className="h-4 w-4" />
-              </span>
-              Resume
-            </CardTitle>
-            <CardDescription className="max-w-md leading-relaxed text-muted-foreground/95">
-              Paste resume text or upload a PDF file.
-            </CardDescription>
+    <Card className="flex h-full flex-col gap-0 overflow-hidden rounded-[18px] border-border/85 bg-card py-0 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.04)]">
+      <CardHeader className="px-5 pb-4 pt-5 sm:px-[22px] sm:pt-[22px]">
+        <div className="mb-3.5 flex items-start justify-between gap-2.5">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] border border-primary/20 bg-gradient-to-b from-primary/10 to-primary/5 text-primary">
+              <FileText className="h-[15px] w-[15px]" />
+            </span>
+            <div className="leading-tight">
+              <div className="text-[17px] font-semibold tracking-[-0.015em] text-foreground">
+                Resume
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Paste text or upload a PDF.
+              </div>
+            </div>
           </div>
           {activeTab === 'text' && (
             <AdminOnly>
@@ -136,66 +138,63 @@ export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
                 variant="quiet"
                 size="sm"
                 onClick={insertSampleResume}
-                className="gap-1.5 whitespace-nowrap"
+                className="h-7 gap-1.5 whitespace-nowrap rounded-[7px] border border-primary/15 bg-primary/[0.08] px-2.5 text-[12px] font-medium text-primary hover:bg-primary/[0.15]"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                Use Sample Resume
+                <Sparkles className="h-3 w-3" />
+                Use sample
               </Button>
             </AdminOnly>
           )}
         </div>
 
         {/* Tab toggle */}
-        <div className="mt-3 flex gap-1 rounded-lg border border-border/60 bg-muted/40 p-0.5">
+        <div className="flex gap-0.5 rounded-[10px] border border-border bg-muted/60 p-[3px]">
           <button
             type="button"
             onClick={() => switchTab('text')}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium transition-colors ${
               activeTab === 'text'
-                ? 'bg-background text-foreground shadow-sm'
+                ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.07)]'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Paste Text
+            <Clipboard className="h-3 w-3" />
+            Paste text
           </button>
           <button
             type="button"
             onClick={() => switchTab('pdf')}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium transition-colors ${
               activeTab === 'pdf'
-                ? 'bg-background text-foreground shadow-sm'
+                ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.07)]'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
+            <Upload className="h-3 w-3" />
             Upload PDF
           </button>
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-4">
+      <CardContent className="flex flex-1 flex-col px-5 pb-5 sm:px-[22px] sm:pb-[22px]">
         {activeTab === 'text' ? (
-          <div className="flex flex-1 flex-col space-y-2">
-            <Label htmlFor="resume-text" className="text-sm font-semibold text-foreground/90">
-              Resume Content
-            </Label>
-            <Textarea
+          <div className="flex flex-1 flex-col">
+            <textarea
               id="resume-text"
-              placeholder="Paste your resume text here."
-              className="min-h-[300px] flex-1 resize-none text-sm leading-relaxed"
+              placeholder="Maya Kowalski&#10;Senior Frontend Engineer&#10;&#10;Experience&#10;Acme Corp — Senior Frontend Engineer (2022–Present)&#10;• Built new features for the web app using React…"
+              className="min-h-[300px] w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15"
               value={pastedText}
               onChange={e => handlePastedTextChange(e.target.value)}
             />
-            <div className="flex justify-between text-xs text-muted-foreground/95">
-              <span>Paste your full resume text</span>
-              <span>{pastedText.length.toLocaleString()} characters</span>
+            <div className="mt-2.5 flex items-center justify-between px-1 text-[11.5px] text-muted-foreground/80">
+              <span>Paste your full resume text — every section helps.</span>
+              <span className="font-medium tabular-nums">
+                {pastedText.length.toLocaleString()} chars · {wordCount} words
+              </span>
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col space-y-2">
-            <Label className="text-sm font-semibold text-foreground/90">
-              PDF File
-            </Label>
-
+          <div className="flex flex-1 flex-col">
             {selectedFile ? (
               <div className="flex flex-1 items-center justify-center">
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
@@ -224,26 +223,36 @@ export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
                 onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                className={`flex min-h-[300px] flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed transition-colors ${
+                className={`flex min-h-[300px] flex-1 cursor-pointer flex-col items-center justify-center rounded-[14px] border-[1.5px] border-dashed bg-muted/55 px-5 text-center transition-colors ${
                   dragOver
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border/60 hover:border-primary/40 hover:bg-muted/20'
+                    ? 'border-primary bg-primary/[0.05]'
+                    : 'border-border hover:border-primary/40'
                 }`}
               >
-                <FileUp className="h-10 w-10 text-muted-foreground/60" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-foreground/80">
-                    Drag and drop your PDF here
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    or click to browse (max 5 MB)
-                  </p>
+                <span className="mb-3.5 inline-flex h-14 w-14 items-center justify-center rounded-[14px] border border-border bg-card text-primary shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                  <FileUp className="h-[26px] w-[26px]" />
+                </span>
+                <p className="text-[15px] font-semibold text-foreground">
+                  Drop your PDF here
+                </p>
+                <p className="mt-1 text-[12.5px] text-muted-foreground">
+                  or <span className="font-semibold text-primary">browse files</span> · max 5 MB · single page recommended
+                </p>
+                <div className="mt-3.5 flex items-center justify-center gap-3.5 text-[11px] text-muted-foreground/80">
+                  <span className="inline-flex items-center gap-1">
+                    <Check className="h-2.5 w-2.5 text-success" strokeWidth={2.5} />
+                    Text-extractable PDFs
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Check className="h-2.5 w-2.5 text-success" strokeWidth={2.5} />
+                    Encrypted in transit
+                  </span>
                 </div>
               </div>
             )}
 
             {fileError && (
-              <p className="text-sm text-destructive">{fileError}</p>
+              <p className="mt-2 text-sm text-destructive">{fileError}</p>
             )}
 
             <input

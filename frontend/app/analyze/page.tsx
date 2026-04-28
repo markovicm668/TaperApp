@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap, RotateCcw } from 'lucide-react';
+import { ArrowRight, Check, RotateCcw, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminOnly } from '@/components/admin-only';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,36 @@ import { useTokens } from '@/lib/tokens/TokenContext';
 import { track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
+interface StatusPillProps {
+  n: number;
+  label: string;
+  hint: string;
+  ready?: boolean;
+  pending?: boolean;
+}
+
+function StatusPill({ n, label, hint, ready, pending }: StatusPillProps) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span
+        className={`inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+          ready
+            ? 'border-primary bg-primary text-primary-foreground'
+            : pending
+              ? 'border-border bg-secondary/60 text-muted-foreground/70'
+              : 'border-border bg-secondary/60 text-muted-foreground'
+        }`}
+      >
+        {ready ? <Check className="h-3 w-3" strokeWidth={2.5} /> : n}
+      </span>
+      <div className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[12px] font-semibold tracking-tight text-foreground">{label}</span>
+        <span className="text-[11px] text-muted-foreground/80">{hint}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyzePage() {
   const router = useRouter();
   const {
@@ -26,7 +56,7 @@ export default function AnalyzePage() {
     resetWorkspace,
   } =
     useResumeActions();
-  const { setTokensRemaining } = useTokens();
+  const { tokensRemaining, setTokensRemaining } = useTokens();
   const { isAdmin } = useAdmin();
 
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
@@ -280,45 +310,109 @@ export default function AnalyzePage() {
     resetWorkspace();
   }, [resetWorkspace]);
 
+  const resumeWordCount = resumeData?.content.trim()
+    ? resumeData.content.trim().split(/\s+/).length
+    : 0;
+  const jdWordCount = jobDescription.trim() ? jobDescription.trim().split(/\s+/).length : 0;
+  const resumeReady = Boolean(resumeData);
+  const jdReady = jobDescription.trim().length >= 50;
+  const ready = resumeReady && jdReady;
+
   return (
-    <div className="mx-auto flex w-full max-w-[1340px] flex-col gap-8">
+    <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-7">
       <div>
-        <p className="text-[11px] font-semibold tracking-[0.08em] text-primary/75">
-          Resume Workspace
-        </p>
-        <h1 className="mt-2 font-serif text-[2.15rem] font-semibold leading-tight tracking-tight text-balance sm:text-[2.35rem]">
-          Analyze Resume
+        <h1 className="mt-4 max-w-[720px] font-serif text-[2.35rem] font-semibold leading-[1.05] tracking-[-0.025em] text-balance sm:text-[2.65rem] xl:text-[3rem]">
+          Tailor your resume to a{' '}
+          <em className="font-normal italic text-primary">specific</em> role.
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Paste your resume and a job description to get tailored rewrite suggestions.
+        <p className="mt-3 max-w-[640px] text-[15px] leading-[1.6] text-muted-foreground">
+          Paste a resume and a job description. Our system finds missing keywords, ATS issues, and suggests rewrites - all in under 50 seconds.
         </p>
       </div>
 
-      <div className="grid flex-1 gap-6 xl:grid-cols-2">
+      <div className="flex items-center gap-2 rounded-[14px] border border-border/85 bg-card px-4 py-2.5 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.03)]">
+        <StatusPill
+          n={1}
+          label="Resume"
+          ready={resumeReady}
+          hint={
+            resumeReady
+              ? resumeData?.file
+                ? resumeData.fileName ?? 'PDF attached'
+                : `${resumeWordCount.toLocaleString()} words`
+              : 'Awaiting input'
+          }
+        />
+        <div className="mx-1 h-px flex-1 bg-border" />
+        <StatusPill
+          n={2}
+          label="Job description"
+          ready={jdReady}
+          hint={
+            jdReady
+              ? `${jdWordCount.toLocaleString()} words`
+              : jobDescription.trim().length > 0
+                ? 'Min 50 characters'
+                : 'Awaiting input'
+          }
+        />
+        <div className="mx-1 h-px flex-1 bg-border" />
+        <StatusPill
+          n={3}
+          label="Analyze"
+          pending={!ready}
+          hint={ready ? 'Ready' : 'Locked'}
+        />
+      </div>
+
+      <div className="grid flex-1 gap-5 xl:grid-cols-2">
         <ResumeInputCard onResumeChange={setResumeData} />
         <JobDescriptionCard onJobDescriptionChange={setJobDescription} />
       </div>
 
-      <div className="rounded-2xl border border-border/85 bg-card/90 p-4 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_8px_24px_rgba(15,23,42,0.03)] sm:p-5">
+      <div className="rounded-2xl border border-border/85 bg-card p-5 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.04)] sm:px-6 sm:py-[18px]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">Ready to run analysis</p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Ensure your resume and job description are complete for better scoring quality.
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold tracking-tight text-foreground">
+              {ready
+                ? 'Ready to analyze'
+                : !resumeData
+                  ? 'Add inputs to continue'
+                  : jobDescription.length < 50
+                    ? 'Add inputs to continue'
+                    : 'Ready to analyze'}
+            </p>
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              {ready ? (
+                <>
+                  This run will use <strong className="font-semibold text-foreground">1 credit</strong>.{' '}
+                  You have <strong className="font-semibold text-foreground">{tokensRemaining}</strong>{' '}
+                  remaining.
+                </>
+              ) : !resumeData ? (
+                <>Paste your resume above to get started.</>
+              ) : jobDescription.length < 50 ? (
+                <>
+                  Job description must be at least 50 characters
+                  {isAdmin ? ' (not required for Parse Resume Only).' : '.'}
+                </>
+              ) : (
+                <>Both fields look good — tap Analyze when you&apos;re ready.</>
+              )}
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <AdminOnly>
-              <Button variant="outline" onClick={handleReset} disabled={isBusy}>
-                <RotateCcw className="mr-2 h-4 w-4" />
+              <Button variant="ghost" onClick={handleReset} disabled={isBusy}>
+                <RotateCcw className="mr-2 h-3.5 w-3.5" />
                 Reset
               </Button>
               <Button
-                variant="secondary"
+                variant="outline"
                 onClick={handleParseOnly}
                 disabled={!canParseOnly || isBusy}
               >
-                Parse Resume Only
+                Parse only
               </Button>
             </AdminOnly>
             <Button
@@ -327,22 +421,13 @@ export default function AnalyzePage() {
               disabled={!canAnalyze || isBusy}
               className="gap-2"
             >
-              <Zap className="h-4 w-4" />
-              Analyze Resume
+              <Wand2 className="h-4 w-4" />
+              Analyze resume
+              <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[11px] font-medium">⏎</span>
             </Button>
           </div>
         </div>
       </div>
-
-      {!canAnalyze && (resumeData || jobDescription) && (
-        <p className="text-sm text-muted-foreground/95">
-          {!resumeData
-            ? 'Please paste your resume'
-            : jobDescription.length < 50
-              ? `Job description must be at least 50 characters${isAdmin ? ' (not required for Parse Resume Only)' : ''}`
-              : null}
-        </p>
-      )}
 
       <AnalysisProgress open={isAnalyzing} parseDone={parseDone} onComplete={handleAnalysisComplete} />
     </div>

@@ -2,10 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { Briefcase, Sparkles } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { sampleJobDescription } from '@/lib/api';
 import { AdminOnly } from '@/components/admin-only';
 
@@ -28,49 +26,53 @@ export function JobDescriptionCard({ onJobDescriptionChange }: JobDescriptionCar
     handleChange(sampleJobDescription);
   }, [handleChange]);
 
+  const wordCount = jobDescription.trim() ? jobDescription.trim().split(/\s+/).length : 0;
+
   return (
-    <Card className="flex h-full flex-col border-border/85 bg-card/92 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_28px_rgba(15,23,42,0.035)]">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1.5">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
-                <Briefcase className="h-4 w-4" />
-              </span>
-              Job Description
-            </CardTitle>
-            <CardDescription className="max-w-md leading-relaxed text-muted-foreground/95">
-              Paste the job posting you want to tailor your resume for.
-            </CardDescription>
+    <Card className="flex h-full flex-col gap-0 overflow-hidden rounded-[18px] border-border/85 bg-card py-0 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.04)]">
+      <CardHeader className="px-5 pb-4 pt-5 sm:px-[22px] sm:pt-[22px]">
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] border border-primary/20 bg-gradient-to-b from-primary/10 to-primary/5 text-primary">
+              <Briefcase className="h-[15px] w-[15px]" />
+            </span>
+            <div className="leading-tight">
+              <div className="text-[17px] font-semibold tracking-[-0.015em] text-foreground">
+                Job description
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                The role you&apos;re tailoring for.
+              </div>
+            </div>
           </div>
           <AdminOnly>
             <Button
               variant="quiet"
               size="sm"
               onClick={insertSampleJd}
-              className="gap-1.5 whitespace-nowrap"
+              className="h-7 gap-1.5 whitespace-nowrap rounded-[7px] border border-primary/15 bg-primary/[0.08] px-2.5 text-[12px] font-medium text-primary hover:bg-primary/[0.15]"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              Use Sample JD
+              <Sparkles className="h-3 w-3" />
+              Use sample
             </Button>
           </AdminOnly>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4">
-        <div className="flex flex-1 flex-col space-y-2">
-          <Label htmlFor="job-description" className="text-sm font-semibold text-foreground/90">
-            Job Description Content
-          </Label>
-          <Textarea
+
+      <CardContent className="flex flex-1 flex-col px-5 pb-5 sm:px-[22px] sm:pb-[22px]">
+        <div className="flex flex-1 flex-col">
+          <textarea
             id="job-description"
-            placeholder="Paste the complete job description here. Include responsibilities, qualifications, and any other relevant details to get the best analysis."
-            className="min-h-[300px] flex-1 resize-none text-sm leading-relaxed"
+            placeholder="Senior Frontend Engineer — Stripe&#10;&#10;About the role&#10;We're hiring a senior frontend engineer to…&#10;&#10;What you'll do&#10;• Architect and ship features in TypeScript&#10;• Design and integrate GraphQL APIs"
+            className="min-h-[300px] w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15"
             value={jobDescription}
             onChange={e => handleChange(e.target.value)}
           />
-          <div className="flex justify-between text-xs text-muted-foreground/95">
-            <span>Paste the full job posting for best results</span>
-            <span>{jobDescription.length.toLocaleString()} characters</span>
+          <div className="mt-2.5 flex items-center justify-between px-1 text-[11.5px] text-muted-foreground/80">
+            <span>Include responsibilities, qualifications, and any &ldquo;nice to haves&rdquo;.</span>
+            <span className="font-medium tabular-nums">
+              {jobDescription.length.toLocaleString()} chars · {wordCount} words
+            </span>
           </div>
         </div>
       </CardContent>
