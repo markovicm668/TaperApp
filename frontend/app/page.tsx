@@ -245,30 +245,6 @@ function HeroA({
           >
             <Zap size={15} /> {authed ? 'Go to Analyzer' : 'Tailor my resume for free'}
           </Link>
-          <a
-            href="#how-it-works"
-            onClick={(event) => {
-              event.preventDefault();
-              document
-                .getElementById('how-it-works')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-            style={{
-              height: 48,
-              padding: '0 18px',
-              fontSize: 14.5,
-              fontWeight: 500,
-              color: 'var(--foreground)',
-              background: 'transparent',
-              border: `1px solid ${BORDER}`,
-              borderRadius: 10,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            See how it works <ArrowRight size={14} />
-          </a>
         </div>
         <div
           style={{
