@@ -264,9 +264,6 @@ function HeroA({
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> 0 data collected
-          </span>
         </div>
       </div>
     </section>
