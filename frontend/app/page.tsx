@@ -90,7 +90,7 @@ export default function LandingPage() {
                   gap: 8,
                 }}
               >
-                <Zap size={15} /> {user ? 'Go to Analyzer' : 'Tailor my resume for free'}
+                <Zap size={15} /> {user ? 'Analyze my resume' : 'Tailor my resume for free'}
               </Link>
             </div>
           </div>
@@ -163,7 +163,7 @@ function HeroA({
             fontSize: 17,
             lineHeight: 1.65,
             color: FG_2,
-            marginBottom: 56,
+            marginBottom: 40,
             maxWidth: 560,
           }}
         >
@@ -173,10 +173,60 @@ function HeroA({
 
         <div
           style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Link
+            href={ctaHref}
+            onClick={onCtaClick}
+            style={{
+              height: 48,
+              padding: '0 22px',
+              fontSize: 14.5,
+              fontWeight: 600,
+              color: '#fff',
+              background: 'var(--primary)',
+              borderRadius: 10,
+              boxShadow: '0 1px 1px rgba(15,21,37,0.12), 0 8px 20px rgba(73,86,126,0.22)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Zap size={15} /> {authed ? 'Analyze your resume' : 'Tailor my resume for free'}
+          </Link>
+        </div>
+
+        <div
+          style={{
+            marginTop: 22,
+            marginBottom: 56,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 14,
+            fontSize: 12.5,
+            color: FG_3,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Check size={12} style={{ color: 'var(--success)' }} /> No credit card required
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
+          </span>
+        </div>
+
+        <div
+          style={{
             position: 'relative',
             width: '100%',
             maxWidth: 720,
-            marginBottom: 64,
           }}
         >
           <div style={{ transform: 'rotate(-1deg)' }}>
@@ -215,55 +265,6 @@ function HeroA({
           >
             <Sparkles size={12} style={{ color: ACCENT }} /> 12 rewrite suggestions
           </div>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Link
-            href={ctaHref}
-            onClick={onCtaClick}
-            style={{
-              height: 48,
-              padding: '0 22px',
-              fontSize: 14.5,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'var(--primary)',
-              borderRadius: 10,
-              boxShadow: '0 1px 1px rgba(15,21,37,0.12), 0 8px 20px rgba(73,86,126,0.22)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <Zap size={15} /> {authed ? 'Go to Analyzer' : 'Tailor my resume for free'}
-          </Link>
-        </div>
-        <div
-          style={{
-            marginTop: 22,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            fontSize: 12.5,
-            color: FG_3,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> No credit card required
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
-          </span>
         </div>
       </div>
     </section>
