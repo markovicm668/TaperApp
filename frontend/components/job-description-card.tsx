@@ -9,9 +9,10 @@ import { AdminOnly } from '@/components/admin-only';
 
 interface JobDescriptionCardProps {
   onJobDescriptionChange: (text: string) => void;
+  hideSampleButton?: boolean;
 }
 
-export function JobDescriptionCard({ onJobDescriptionChange }: JobDescriptionCardProps) {
+export function JobDescriptionCard({ onJobDescriptionChange, hideSampleButton = false }: JobDescriptionCardProps) {
   const [jobDescription, setJobDescription] = useState('');
 
   const handleChange = useCallback(
@@ -45,17 +46,19 @@ export function JobDescriptionCard({ onJobDescriptionChange }: JobDescriptionCar
               </div>
             </div>
           </div>
-          <AdminOnly>
-            <Button
-              variant="quiet"
-              size="sm"
-              onClick={insertSampleJd}
-              className="h-7 gap-1.5 whitespace-nowrap rounded-[7px] border border-primary/15 bg-primary/[0.08] px-2.5 text-[12px] font-medium text-primary hover:bg-primary/[0.15]"
-            >
-              <Sparkles className="h-3 w-3" />
-              Use sample
-            </Button>
-          </AdminOnly>
+          {!hideSampleButton && (
+            <AdminOnly>
+              <Button
+                variant="quiet"
+                size="sm"
+                onClick={insertSampleJd}
+                className="h-7 gap-1.5 whitespace-nowrap rounded-[7px] border border-primary/15 bg-primary/[0.08] px-2.5 text-[12px] font-medium text-primary hover:bg-primary/[0.15]"
+              >
+                <Sparkles className="h-3 w-3" />
+                Use sample
+              </Button>
+            </AdminOnly>
+          )}
         </div>
       </CardHeader>
 

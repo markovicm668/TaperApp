@@ -13,6 +13,7 @@ const MAX_PDF_SIZE = 5 * 1024 * 1024;
 
 interface ResumeInputCardProps {
   onResumeChange: (data: { type: 'file' | 'text' | 'linkedin'; content: string; fileName?: string; file?: File } | null) => void;
+  hideSampleButton?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -21,7 +22,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
+export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: ResumeInputCardProps) {
   const [activeTab, setActiveTab] = useState<InputTab>('text');
   const [pastedText, setPastedText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -132,7 +133,7 @@ export function ResumeInputCard({ onResumeChange }: ResumeInputCardProps) {
               </div>
             </div>
           </div>
-          {activeTab === 'text' && (
+          {activeTab === 'text' && !hideSampleButton && (
             <AdminOnly>
               <Button
                 variant="quiet"

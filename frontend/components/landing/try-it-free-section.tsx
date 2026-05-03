@@ -95,8 +95,8 @@ export function TryItFreeSection() {
         ) : (
           <>
             <div className="grid gap-5 xl:grid-cols-2">
-              <ResumeInputCard onResumeChange={setResumeData} />
-              <JobDescriptionCard onJobDescriptionChange={setJobDescription} />
+              <ResumeInputCard onResumeChange={setResumeData} hideSampleButton />
+              <JobDescriptionCard onJobDescriptionChange={setJobDescription} hideSampleButton />
             </div>
 
             <div className="mt-5 rounded-2xl border border-border/85 bg-card p-5 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.04)] sm:px-6 sm:py-[18px]">
