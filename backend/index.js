@@ -11,6 +11,8 @@ const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
 const requireAuth = require("./middleware/requireAuth");
 const requireTokens = require("./middleware/requireTokens");
+const optionalAuth = require("./middleware/optionalAuth");
+const optionalTokens = require("./middleware/optionalTokens");
 
 const app = express();
 
@@ -42,10 +44,12 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.use("/user/me", requireAuth, userRoute);
-app.use("/analyze", requireAuth, requireTokens(1), analyzeRoute);
-app.use("/parse", requireAuth, requireTokens(1), parseRoute);
-app.use("/parse-pdf", requireAuth, requireTokens(1), parsePdfRoute);
-app.use("/export", requireAuth, exportRoute);
+app.use("/analyze", optionalAuth, optionalTokens(1), analyzeRoute);
+app.use("/parse", optionalAuth, optionalTokens(1), parseRoute);
+app.use("/parse-pdf", optionalAuth, optionalTokens(1), parsePdfRoute);
+// /export/preview is anonymous-friendly; /export/pdf has its own requireAuth
+// applied inside the router so the gate fires only for the paid action.
+app.use("/export", exportRoute);
 
 // 404
 app.use((req, res) => {

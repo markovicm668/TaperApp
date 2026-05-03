@@ -219,7 +219,7 @@ Your task is to compare the provided resume against the job description and prod
   ${jobDescription}
 
   RESUME:
-  ${resumeForPrompt}
+${resumeForPrompt}
 
 You must follow this process internally before generating output:
 1. Infer the target role, company, seniority, and most important keywords from the job description.

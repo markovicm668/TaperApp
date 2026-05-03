@@ -41,6 +41,15 @@ async function requireAuthToken(options?: GetTokenOptions): Promise<string> {
   return token;
 }
 
+async function tryGetAuthToken(options?: GetTokenOptions): Promise<string | null> {
+  if (!authTokenResolver) return null;
+  try {
+    return await authTokenResolver(options);
+  } catch {
+    return null;
+  }
+}
+
 async function parseApiErrorMessage(res: Response, fallbackMessage: string): Promise<string> {
   try {
     const data = await res.json();
@@ -52,15 +61,27 @@ async function parseApiErrorMessage(res: Response, fallbackMessage: string): Pro
   }
 }
 
+interface FetchWithAuthOptions {
+  auth?: 'required' | 'optional';
+}
+
 async function fetchWithAuth(
   path: string,
   init: RequestInit,
-  fallbackErrorMessage: string
+  fallbackErrorMessage: string,
+  options: FetchWithAuthOptions = {}
 ): Promise<Response> {
+  const authMode = options.auth ?? 'required';
+
   const makeRequest = async (forceRefresh = false): Promise<Response> => {
-    const token = await requireAuthToken({ forceRefresh });
     const headers = new Headers(init.headers || {});
-    headers.set('Authorization', `Bearer ${token}`);
+    const token =
+      authMode === 'required'
+        ? await requireAuthToken({ forceRefresh })
+        : await tryGetAuthToken({ forceRefresh });
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
 
     console.log('[api] fetching:', `${API_BASE_URL}${path}`);
     return fetch(`${API_BASE_URL}${path}`, {
@@ -71,7 +92,7 @@ async function fetchWithAuth(
 
   let res = await makeRequest(false);
 
-  if (res.status === 401) {
+  if (res.status === 401 && authMode === 'required') {
     res = await makeRequest(true);
     if (res.status === 401) {
       if (authFailureHandler) {
@@ -183,7 +204,7 @@ export async function analyzeResume(
       fileName: resume.fileName,
       ...(parsedResumeData ? { parsedResumeData } : {}),
     }),
-  }, 'Analyze failed');
+  }, 'Analyze failed', { auth: 'optional' });
 
   const json = await res.json();
 
@@ -335,7 +356,7 @@ export async function parseResume(request: {
       inputType: request.inputType || 'text',
       fileName: request.fileName,
     }),
-  }, 'Parse failed');
+  }, 'Parse failed', { auth: 'optional' });
 
   const json = await res.json();
   if (!json?.data) {
@@ -374,7 +395,7 @@ export async function parseResumePdf(
   const res = await fetchWithAuth('/parse-pdf', {
     method: 'POST',
     body: formData,
-  }, 'PDF parse failed');
+  }, 'PDF parse failed', { auth: 'optional' });
 
   const json = await res.json();
   if (!json?.data) {
@@ -391,7 +412,7 @@ export async function fetchResumePreviewHtml(resume: ResumePdfPayload): Promise<
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ resume }),
-  }, 'Preview generation failed');
+  }, 'Preview generation failed', { auth: 'optional' });
 
   const json = await res.json();
   return json.html as string;

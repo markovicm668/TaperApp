@@ -21,6 +21,7 @@ import {
   useEffectiveSectionViewModel,
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
+import { useAuth } from '@/lib/auth/useAuth';
 import { track } from '@/lib/analytics';
 import {
   buildPdfSelectionModel,
@@ -35,6 +36,7 @@ const PDF_SELECTION_STORAGE_KEY = 'resumePdfSelection.v1';
 
 export default function ResultsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const isHydrated = useIsResumeHydrated();
   const analysisResult = useLastAnalysisResult();
   const canonicalParsePayload = useCanonicalParsePayload();
@@ -49,9 +51,11 @@ export default function ResultsPage() {
   useEffect(() => {
     if (!isHydrated) return;
     if (!analysisResult) {
-      router.push('/analyze');
+      // Guests don't have access to /analyze — send them back to the landing
+      // page where the inline "Try it free" section lives.
+      router.push(user ? '/analyze' : '/');
     }
-  }, [analysisResult, isHydrated, router]);
+  }, [analysisResult, isHydrated, router, user]);
 
   const resultsViewedRef = useRef(false);
   useEffect(() => {
@@ -144,6 +148,15 @@ export default function ResultsPage() {
     if (!exportResumePayload) {
       toast.error('PDF export unavailable', {
         description: 'No canonical parse payload is available to export.',
+      });
+      return;
+    }
+
+    if (!user) {
+      track('guest_download_blocked');
+      toast.info('Sign up to download your PDF', {
+        description: 'Free — takes 10 seconds with Google.',
+        action: { label: 'Sign up', onClick: () => router.push('/login') },
       });
       return;
     }

@@ -824,11 +824,20 @@ function generateResumeHtml(resume) {
       if (section.kind !== 'custom') renderedCanonicalKinds.add(section.kind);
     });
 
-    // Languages may exist in resumeData but not in parsed sections (e.g. when
-    // the original resume listed languages inside the skills section).  Append
-    // them if the dynamic sections didn't already include a languages entry.
+    // Skills and languages can exist in resumeData without a corresponding
+    // entry in parsed sections — skills because the UI/AI adds new entries
+    // to resumeData.skills without registering a section, languages because
+    // the original resume sometimes lists them inside the skills section.
+    // Append them as a fallback so added content still renders. Other
+    // canonical kinds (work/projects/awards/etc.) intentionally honor the
+    // dynamic-section selection and are not auto-appended here.
+    if (!renderedCanonicalKinds.has('skills') && isNonEmptyText(skillsHtml)) {
+      sections.push(renderCanonicalSection('skills', 'Skills', skillsHtml));
+      renderedCanonicalKinds.add('skills');
+    }
     if (!renderedCanonicalKinds.has('languages') && isNonEmptyText(languagesHtml)) {
       sections.push(renderCanonicalSection('languages', 'Languages', languagesHtml));
+      renderedCanonicalKinds.add('languages');
     }
   } else {
     if (isNonEmptyText(summaryHtml)) {

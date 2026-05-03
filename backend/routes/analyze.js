@@ -47,10 +47,13 @@ router.post("/", async (req, res) => {
       `\n   ${"TOTAL".padEnd(20)} ${String(total).padStart(6)}ms\n`
     );
 
-    // Credit referrer on referee's first analysis (fire-and-forget)
-    claimReferralReward(req.auth.uid).catch((err) =>
-      console.error("-> Referral reward error:", err)
-    );
+    // Credit referrer on referee's first analysis (fire-and-forget).
+    // Skipped for anonymous (free-trial) requests.
+    if (req.auth?.uid) {
+      claimReferralReward(req.auth.uid).catch((err) =>
+        console.error("-> Referral reward error:", err)
+      );
+    }
 
     res.json({ success: true, data: result, parsed: parseResult.payload, tokensRemaining: req.tokensRemaining });
 

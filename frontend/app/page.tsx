@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/auth/useAuth';
 import { GateScreen, useInAppBrowser } from '@/components/auth/InAppBrowserGate';
 import { track } from '@/lib/analytics';
 import { AnalyzeMock, ScoreCallout } from '@/components/landing/product-mocks';
+import { TryItFreeSection } from '@/components/landing/try-it-free-section';
 
 const ACCENT = '#c98a3f';
 const FG_2 = 'rgba(14,21,37,0.62)';
@@ -42,7 +43,7 @@ export default function LandingPage() {
     return <GateScreen detection={detection} />;
   }
 
-  const ctaHref = user ? '/analyze' : '/login';
+  const ctaHref = user ? '/analyze' : '#try-it-free';
 
   const handleCtaClick = (event: MouseEvent<HTMLAnchorElement>) => {
     track('landing_cta_clicked', { authed: Boolean(user), destination: ctaHref });
@@ -59,6 +60,8 @@ export default function LandingPage() {
 
       <FeaturesSection />
       <HowItWorksSection />
+
+      <TryItFreeSection />
 
       {/* CTA */}
       <section>

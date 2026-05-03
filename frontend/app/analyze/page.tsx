@@ -2,14 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Check, RotateCcw, Wand2 } from 'lucide-react';
+import { Check, RotateCcw, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminOnly } from '@/components/admin-only';
 import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
 import { AnalysisProgress } from '@/components/analysis-progress';
-import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
+import { parseResume, parseResumePdf } from '@/lib/api';
+import { useAnalyzeFlow } from '@/lib/analyze/useAnalyzeFlow';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAdmin } from '@/lib/auth/useAdmin';
@@ -54,23 +55,15 @@ export default function AnalyzePage() {
     setAnalysisSnapshot,
     setParsedPayload,
     resetWorkspace,
-  } =
-    useResumeActions();
+  } = useResumeActions();
   const { tokensRemaining, setTokensRemaining } = useTokens();
   const { isAdmin } = useAdmin();
 
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
   const [jobDescription, setJobDescription] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isParsingOnly, setIsParsingOnly] = useState(false);
 
-  const [parseDone, setParseDone] = useState(false);
-
-  // Both flags must be true before we navigate to results.
-  // Using refs so the check always reads latest values without stale closures.
-  const apiDoneRef = useRef(false);
-  const progressDoneRef = useRef(false);
-  const apiErrorRef = useRef(false);
+  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow();
 
   const canAnalyze = resumeData && jobDescription.trim().length > 50;
   const canParseOnly = Boolean(resumeData);
@@ -104,135 +97,10 @@ export default function AnalyzePage() {
     }
   }, [jobDescription]);
 
-  const tryNavigateToResults = useCallback(() => {
-    if (apiDoneRef.current && progressDoneRef.current) {
-      setIsAnalyzing(false);
-      if (!apiErrorRef.current) {
-        router.push('/results');
-      }
-    }
-  }, [router]);
-
-  const handleAnalyze = useCallback(async () => {
+  const handleAnalyzeClick = useCallback(() => {
     if (!resumeData || !jobDescription) return;
-
-    setParseDone(false);
-    progressDoneRef.current = false;
-    apiErrorRef.current = false;
-    setIsAnalyzing(true);
-    const analysisStartedAt = Date.now();
-    track('analysis_started', {
-      input_type: resumeData.type,
-      has_file: Boolean(resumeData.file),
-      jd_char_count: jobDescription.trim().length,
-    });
-
-    setSourceInput({
-      inputType: resumeData.type,
-      rawText: resumeData.file ? '' : resumeData.content,
-      fileName: resumeData.fileName,
-      clearAnalysis: true,
-    });
-
-    try {
-      // Step 1: Parse resume separately so the progress dialog
-      // reflects real parse time (costs 1 token).
-      const parseResult = resumeData.file
-        ? await parseResumePdf(resumeData.file)
-        : await parseResume({
-            resumeText: resumeData.content,
-            inputType: resumeData.type,
-            fileName: resumeData.fileName,
-          });
-      setParsedPayload(parseResult);
-      setParseDone(true);
-
-      // Step 2: Run full analysis (costs 3 tokens).
-      // Pass the already-parsed resumeData so the backend skips re-parsing.
-      const { result, parsed, tokensRemaining } = await analyzeResume(
-            { type: resumeData.type, content: resumeData.file ? '' : resumeData.content, fileName: resumeData.fileName },
-            { text: jobDescription },
-            parseResult.resumeData
-          );
-
-      if (tokensRemaining !== undefined) {
-        setTokensRemaining(tokensRemaining);
-      }
-
-      if (parsed && parsed.source) {
-        setParsedPayload(parsed);
-      }
-
-      const resultWithSource: AnalysisResult = {
-        ...result,
-        id: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-      };
-
-      setAnalysisSnapshot(analysisResultToSnapshot(resultWithSource));
-      track('analysis_completed', {
-        match_score: result.matchScore,
-        duration_ms: Date.now() - analysisStartedAt,
-        target_role: result.targetRole || null,
-      });
-      apiDoneRef.current = true;
-      tryNavigateToResults();
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'INSUFFICIENT_TOKENS') {
-        track('analysis_failed', { reason: 'insufficient_tokens' });
-        toast.error('Insufficient tokens', {
-          description: (err as unknown as Error).message,
-        });
-        setParseDone(true);
-        setIsAnalyzing(false);
-        return;
-      }
-
-      const errorMessage = err instanceof Error ? err.message : 'Unknown API error occurred.';
-      track('analysis_failed', { reason: 'api_error', error: errorMessage });
-      console.error('Analysis API Error:', errorMessage, err);
-
-      const errorResult: AnalysisResult = {
-        id: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        status: 'failed',
-        matchScore: 0,
-        targetRole: 'Analysis Failed',
-        company: 'API Error',
-        overallFit: 'poor',
-        roleSeniority: 'mid',
-        keywordGaps: [],
-        bulletChanges: [],
-        rewriteSuggestions: [],
-        atsChecks: [],
-        riskFlags: [{ id: 'err', title: 'API Failure', description: errorMessage, severity: 'high' }],
-        recommendedEdits: [],
-        skillCategoryRenames: [],
-      };
-
-      setAnalysisSnapshot(analysisResultToSnapshot(errorResult));
-      setParsedPayload(null);
-
-      toast.error('Analysis failed', {
-        description: errorMessage || 'Please check the console for details.',
-      });
-
-      setParseDone(true);
-      apiDoneRef.current = true;
-      apiErrorRef.current = true;
-      tryNavigateToResults();
-    }
-  }, [
-    jobDescription,
-    resumeData,
-    setAnalysisSnapshot,
-    setParsedPayload,
-    setSourceInput,
-    setTokensRemaining,
-    tryNavigateToResults,
-  ]);
-
+    void handleAnalyze(resumeData, jobDescription);
+  }, [handleAnalyze, jobDescription, resumeData]);
 
   const handleParseOnly = useCallback(async () => {
     if (!resumeData) return;
@@ -298,11 +166,6 @@ export default function AnalyzePage() {
       setIsParsingOnly(false);
     }
   }, [resumeData, router, setAnalysisSnapshot, setParsedPayload, setSourceInput, setTokensRemaining]);
-
-  const handleAnalysisComplete = useCallback(() => {
-    progressDoneRef.current = true;
-    tryNavigateToResults();
-  }, [tryNavigateToResults]);
 
   const handleReset = useCallback(() => {
     setResumeData(null);
@@ -417,7 +280,7 @@ export default function AnalyzePage() {
             </AdminOnly>
             <Button
               size="lg"
-              onClick={handleAnalyze}
+              onClick={handleAnalyzeClick}
               disabled={!canAnalyze || isBusy}
               className="gap-2"
             >

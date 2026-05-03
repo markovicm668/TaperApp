@@ -15,7 +15,8 @@ type AnalyticsEvent =
   | 'analysis_failed'
   | 'results_viewed'
   | 'resume_exported'
-  | 'resume_export_failed';
+  | 'resume_export_failed'
+  | 'guest_download_blocked';
 
 type EventProps = Record<string, string | number | boolean | null | undefined>;
 

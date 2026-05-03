@@ -1,6 +1,7 @@
 const express = require("express");
 const { generatePdfFromHtml } = require("../services/pdfService");
 const { generateResumeHtml, validateResume } = require("../services/resumeTemplate");
+const requireAuth = require("../middleware/requireAuth");
 
 function createExportRouter({
   renderResumeHtml = generateResumeHtml,
@@ -9,6 +10,8 @@ function createExportRouter({
 } = {}) {
   const router = express.Router();
 
+  // Preview is open to anonymous users — it just renders HTML from a payload
+  // the client already has, no AI/LLM cost. PDF export below requires auth.
   router.post("/preview", async (req, res) => {
     try {
       const { resume } = req.body || {};
@@ -31,7 +34,7 @@ function createExportRouter({
     }
   });
 
-  router.post("/pdf", async (req, res) => {
+  router.post("/pdf", requireAuth, async (req, res) => {
     try {
       const { resume } = req.body || {};
       console.log("-> PDF export request received.");

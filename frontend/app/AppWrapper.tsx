@@ -11,6 +11,7 @@ import { ResumeProvider } from '@/lib/resume/ResumeProvider';
 import { TokenProvider, useTokens } from '@/lib/tokens/TokenContext';
 import type { User } from '@/lib/types';
 import { identifyUser, initAnalytics, resetAnalytics } from '@/lib/analytics';
+import { readWorkspaceFromSession } from '@/lib/resume/storage';
 
 function mapAuthUserToAppUser(params: { name: string; email: string; creditsRemaining: number }): User {
   return {
@@ -39,7 +40,12 @@ function AuthShell({ children }: { children: ReactNode }) {
 
   const isLoginPage = pathname === '/login';
   const isLandingPage = pathname === '/';
-  const isPublicPage = isLoginPage || isLandingPage || pathname === '/terms' || pathname === '/privacy';
+  const isPublicPage =
+    isLoginPage ||
+    isLandingPage ||
+    pathname === '/terms' ||
+    pathname === '/privacy' ||
+    pathname === '/results';
 
   useEffect(() => {
     initAnalytics();
@@ -76,7 +82,9 @@ function AuthShell({ children }: { children: ReactNode }) {
     }
 
     if (user && isLoginPage) {
-      router.replace('/analyze');
+      const workspace = readWorkspaceFromSession();
+      const hasPendingAnalysis = Boolean(workspace?.analysis?.lastAnalysisResult);
+      router.replace(hasPendingAnalysis ? '/results' : '/analyze');
     }
   }, [isLoginPage, isPublicPage, loading, router, user]);
 

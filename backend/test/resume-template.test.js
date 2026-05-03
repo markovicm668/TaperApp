@@ -400,6 +400,90 @@ test('generateResumeHtml avoids duplicated ABOUT ME label in canonical summary m
   );
 });
 
+test('generateResumeHtml renders skills added to resumeData when not in parsed sections', () => {
+  const resume = {
+    basics: { name: 'James Whitfield', email: 'james.whitfield@gmail.com' },
+    summary: 'Retail summary',
+    work: [
+      {
+        position: 'Retail Assistant',
+        company: 'B&Q',
+        highlights: ['Assisted customers'],
+      },
+    ],
+    education: [
+      {
+        institution: 'University of Manchester',
+        degree: 'MEng Electrical and Electronic Engineering',
+      },
+    ],
+    skills: [
+      { name: 'MS Office Proficiency', category: 'Tools' },
+      { name: 'POS Systems', category: 'Tools' },
+      { name: 'Visual Merchandising', category: 'Operations' },
+    ],
+    projects: [],
+    awards: [],
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['James Whitfield'] },
+      { id: 'canonical-summary', title: 'Personal Summary', kind: 'summary', lines: ['Retail summary'] },
+      {
+        id: 'canonical-work',
+        title: 'Work Experience',
+        kind: 'work',
+        lines: ['Retail Assistant — B&Q'],
+      },
+      {
+        id: 'canonical-education',
+        title: 'Education',
+        kind: 'education',
+        lines: ['University of Manchester'],
+      },
+    ],
+    sectionOrder: [
+      'canonical-header',
+      'canonical-summary',
+      'canonical-work',
+      'canonical-education',
+    ],
+  };
+
+  const html = generateResumeHtml(resume);
+
+  assert.equal(html.includes('<h2>Skills</h2>'), true);
+  assert.equal(html.includes('MS Office Proficiency'), true);
+  assert.equal(html.includes('POS Systems'), true);
+  assert.equal(html.includes('Visual Merchandising'), true);
+});
+
+test('generateResumeHtml does not duplicate skills when parsed skills section exists', () => {
+  const resume = {
+    basics: { name: 'Jane Doe' },
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    languages: [],
+    skills: [{ name: 'Python', category: 'Languages' }],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Jane Doe'] },
+      {
+        id: 'canonical-skills',
+        title: 'Skills',
+        kind: 'skills',
+        lines: [],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'canonical-skills'],
+  };
+
+  const html = generateResumeHtml(resume);
+  const skillsSectionCount = (html.match(/class="section section-skills"/g) || []).length;
+  assert.equal(skillsSectionCount, 1);
+  assert.equal((html.match(/Python/g) || []).length, 1);
+});
+
 test('generateResumeHtml renders header from basics when sections exist but contain no header entry', () => {
   const resume = {
     basics: {
