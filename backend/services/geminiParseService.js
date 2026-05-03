@@ -60,9 +60,17 @@ function extractJsonText(text) {
   });
 }
 
-function buildPrompt({ resumeText, inputType, fileName, repairReason }) {
+function buildPrompt({ resumeText, inputType, fileName, repairReason, hyperlinks }) {
   const repairInstruction = repairReason
     ? `\nREPAIR NOTE:\nPrevious output failed validation because: ${repairReason}\nFix this and return valid JSON only.\n`
+    : "";
+
+  const hyperlinksList = Array.isArray(hyperlinks) ? hyperlinks : [];
+  const hyperlinksBlock = hyperlinksList.length
+    ? `\n\nHyperlinks (text → url) detected in source PDF:\n` +
+      hyperlinksList
+        .map((h) => `- "${(h && h.text) || ""}" → ${(h && h.url) || ""}`)
+        .join("\n")
     : "";
 
   return `You are a resume parser that extracts sections into strict JSON.
@@ -86,6 +94,7 @@ Task:
 - Unknown fields must be omitted or empty.
 - Do not merge project sections into experience unless explicitly equivalent.
 - If summary section is missing, sectionPresence.summary must be false.
+- If a "Hyperlinks" list is provided after the resume text, prefer those URLs when filling basics.profiles[].url, projects[].url, projects[].repository, and any work/project highlight that references an external resource. Match each URL to the right field by surrounding text context (e.g. a link whose text is "LinkedIn" or that points to linkedin.com belongs in basics.profiles, while a github.com URL near a project belongs in projects[].repository). Do not invent profiles or projects just because a URL exists.
 - Output JSON only. No markdown, no prose.
 
 Context:
@@ -208,7 +217,7 @@ Output schema (JSON):
 }
 ${repairInstruction}
 Resume text:
-${resumeText}`;
+${resumeText}${hyperlinksBlock}`;
 }
 
 function parseModelJson(text) {
@@ -283,7 +292,7 @@ function mapModelOutputToPayload({
 }
 
 async function parseResumeSections(
-  { resumeText, inputType = "text", fileName },
+  { resumeText, inputType = "text", fileName, hyperlinks = [] },
   options = {}
 ) {
   const {
@@ -307,6 +316,7 @@ async function parseResumeSections(
         resumeText: normalizedText,
         inputType,
         fileName,
+        hyperlinks,
         repairReason: lastError && !lastError.message?.includes("timed out")
           ? lastError.message
           : undefined,

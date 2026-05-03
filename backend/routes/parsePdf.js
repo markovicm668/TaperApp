@@ -50,12 +50,36 @@ router.post("/", handleMulterUpload, async (req, res) => {
 
     lap("upload");
 
-    // Extract text from PDF
+    // Extract text and hyperlinks from PDF
     let extractedText;
+    let hyperlinks = [];
     try {
       const parser = new PDFParse({ data: req.file.buffer });
       await parser.load();
       const textResult = await parser.getText();
+      try {
+        const infoResult = await parser.getInfo({ parsePageInfo: true });
+        const pageLinks = Array.isArray(infoResult && infoResult.pages) ? infoResult.pages : [];
+        const seen = new Set();
+        for (const page of pageLinks) {
+          const links = Array.isArray(page && page.links) ? page.links : [];
+          for (const link of links) {
+            const url = typeof link?.url === "string" ? link.url.trim() : "";
+            if (!url) continue;
+            if (/^(mailto:|tel:)/i.test(url)) continue;
+            const text = typeof link?.text === "string" ? link.text.trim() : "";
+            const key = `${text}|${url}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            hyperlinks.push({ text, url });
+            if (hyperlinks.length >= 50) break;
+          }
+          if (hyperlinks.length >= 50) break;
+        }
+      } catch (linkErr) {
+        console.warn("-> [pdf-parse] hyperlink extraction failed:", linkErr.message);
+        hyperlinks = [];
+      }
       await parser.destroy();
       await new Promise(resolve => setImmediate(resolve));
       extractedText = textResult.text;
@@ -72,11 +96,15 @@ router.post("/", handleMulterUpload, async (req, res) => {
       throw err;
     }
     lap("pdf-extract");
+    if (hyperlinks.length) {
+      console.log(`-> [pdf-parse] extracted ${hyperlinks.length} hyperlink(s)`);
+    }
 
     const parseResult = await parseResumeSections({
       resumeText: extractedText,
       inputType: "file",
       fileName: req.file.originalname,
+      hyperlinks,
     });
     lap("gemini-parse");
 
