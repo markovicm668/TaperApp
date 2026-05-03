@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
 import { ResumePreview } from '@/components/results/resume-preview';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
+import { DownloadGateDialog } from '@/components/results/download-gate-dialog';
 import { Button } from '@/components/ui/button';
 import { exportResumePdf } from '@/lib/api';
 import { useResumePreview } from '@/lib/resume/use-resume-preview';
@@ -47,6 +48,7 @@ export default function ResultsPage() {
   const [isCopyingJson, setIsCopyingJson] = useState(false);
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
   const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
+  const [gateOpen, setGateOpen] = useState(false);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -154,10 +156,7 @@ export default function ResultsPage() {
 
     if (!user) {
       track('guest_download_blocked');
-      toast.info('Sign up to download your PDF', {
-        description: 'Free — takes 10 seconds with Google.',
-        action: { label: 'Sign up', onClick: () => router.push('/login') },
-      });
+      setGateOpen(true);
       return;
     }
 
@@ -347,6 +346,8 @@ export default function ResultsPage() {
           </Button>
         </div>
       </div>
+
+      <DownloadGateDialog open={gateOpen} onOpenChange={setGateOpen} />
 
       <section className="w-full" aria-label="Diff View">
         <div className="relative grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
