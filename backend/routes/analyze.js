@@ -19,7 +19,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({
         error: {
           code: "INVALID_INPUT",
-          message: "resumeText and jobDescription are required"
+          message: "resumeText and jobDescription are required!"
         }
       });
     }
