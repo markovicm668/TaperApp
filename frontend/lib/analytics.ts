@@ -3,7 +3,12 @@
 import mixpanel from 'mixpanel-browser';
 
 type AnalyticsEvent =
-  | 'landing_cta_clicked'
+  | 'landing_hero_cta_clicked'
+  | 'landing_try_analyze_clicked'
+  | 'landing_signed_in_workspace_clicked'
+  | 'landing_signup_after_used_clicked'
+  | 'landing_footer_terms_clicked'
+  | 'landing_footer_privacy_clicked'
   | 'login_page_viewed'
   | 'signin_started'
   | 'signin_completed'

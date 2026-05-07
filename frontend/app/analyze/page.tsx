@@ -63,7 +63,9 @@ export default function AnalyzePage() {
   const [jobDescription, setJobDescription] = useState('');
   const [isParsingOnly, setIsParsingOnly] = useState(false);
 
-  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow();
+  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow({
+    source: 'analyze_page',
+  });
 
   const canAnalyze = resumeData && jobDescription.trim().length > 50;
   const canParseOnly = Boolean(resumeData);

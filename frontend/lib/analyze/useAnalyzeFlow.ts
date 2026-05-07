@@ -10,8 +10,11 @@ import { useTokens } from '@/lib/tokens/TokenContext';
 import { track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
+type AnalyzeSource = 'landing' | 'analyze_page';
+
 interface UseAnalyzeFlowOptions {
   onAnalyzed?: () => void;
+  source?: AnalyzeSource;
 }
 
 export interface AnalyzeFlow {
@@ -25,6 +28,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
   const router = useRouter();
   const { setSourceInput, setAnalysisSnapshot, setParsedPayload } = useResumeActions();
   const { setTokensRemaining } = useTokens();
+  const source: AnalyzeSource = options.source ?? 'analyze_page';
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseDone, setParseDone] = useState(false);
@@ -58,6 +62,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
       setIsAnalyzing(true);
       const analysisStartedAt = Date.now();
       track('analysis_started', {
+        source,
         input_type: resumeData.type,
         has_file: Boolean(resumeData.file),
         jd_char_count: jobDescription.trim().length,
@@ -112,6 +117,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
 
         setAnalysisSnapshot(analysisResultToSnapshot(resultWithSource));
         track('analysis_completed', {
+          source,
           match_score: result.matchScore,
           duration_ms: Date.now() - analysisStartedAt,
           target_role: result.targetRole || null,
@@ -126,7 +132,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
           'code' in err &&
           (err as { code: string }).code === 'INSUFFICIENT_TOKENS'
         ) {
-          track('analysis_failed', { reason: 'insufficient_tokens' });
+          track('analysis_failed', { source, reason: 'insufficient_tokens' });
           toast.error('Insufficient tokens', {
             description: (err as unknown as Error).message,
           });
@@ -136,7 +142,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         }
 
         const errorMessage = err instanceof Error ? err.message : 'Unknown API error occurred.';
-        track('analysis_failed', { reason: 'api_error', error: errorMessage });
+        track('analysis_failed', { source, reason: 'api_error', error: errorMessage });
         console.error('Analysis API Error:', errorMessage, err);
 
         const errorResult: AnalysisResult = {
@@ -172,7 +178,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         tryNavigateToResults();
       }
     },
-    [setAnalysisSnapshot, setParsedPayload, setSourceInput, setTokensRemaining, tryNavigateToResults]
+    [setAnalysisSnapshot, setParsedPayload, setSourceInput, setTokensRemaining, source, tryNavigateToResults]
   );
 
   const handleAnalysisComplete = useCallback(() => {

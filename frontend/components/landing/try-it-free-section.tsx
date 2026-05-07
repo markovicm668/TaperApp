@@ -10,6 +10,7 @@ import { AnalysisProgress } from '@/components/analysis-progress';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useAnalyzeFlow } from '@/lib/analyze/useAnalyzeFlow';
 import { hasUsedFreeAnalysis, markFreeAnalysisUsed } from '@/lib/freeAnalysis';
+import { track } from '@/lib/analytics';
 import type { ResumeInput } from '@/lib/types';
 
 export function TryItFreeSection() {
@@ -25,6 +26,7 @@ export function TryItFreeSection() {
   }, [user]);
 
   const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow({
+    source: 'landing',
     onAnalyzed: () => {
       if (!user) markFreeAnalysisUsed();
     },
@@ -36,6 +38,10 @@ export function TryItFreeSection() {
 
   const onAnalyzeClick = () => {
     if (!resumeData || !jobDescription) return;
+    track('landing_try_analyze_clicked', {
+      authed: Boolean(user),
+      jd_char_count: jobDescription.trim().length,
+    });
     void handleAnalyze(resumeData, jobDescription);
   };
 
@@ -155,6 +161,7 @@ function SignedInPanel() {
       </p>
       <Link
         href="/analyze"
+        onClick={() => track('landing_signed_in_workspace_clicked')}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -196,6 +203,7 @@ function UsedPanel() {
       </p>
       <Link
         href="/login"
+        onClick={() => track('landing_signup_after_used_clicked')}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

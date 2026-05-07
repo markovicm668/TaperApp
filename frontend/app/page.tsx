@@ -46,7 +46,7 @@ export default function LandingPage() {
   const ctaHref = user ? '/analyze' : '#try-it-free';
 
   const handleCtaClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    track('landing_cta_clicked', { authed: Boolean(user), destination: ctaHref });
+    track('landing_hero_cta_clicked', { authed: Boolean(user), destination: ctaHref });
     if (detection?.isInAppBrowser) {
       event.preventDefault();
       setGateOpen(true);
@@ -65,7 +65,7 @@ export default function LandingPage() {
 
       {/* CTA */}
       <section>
-        <div>
+        {/* <div>
           <div className="mx-auto max-w-3xl px-6 py-20 text-center sm:py-28">
             <h2 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
               Ready to tailor your resume?
@@ -97,7 +97,7 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
-        </div>
+        </div> */}
       </section>
 
       <Footer />
@@ -623,10 +623,18 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-8 sm:flex-row sm:justify-between">
         <span className="font-serif text-sm font-medium text-muted-foreground">Tailor</span>
         <div className="flex items-center gap-4">
-          <Link href="/terms" className="text-xs text-muted-foreground/60 hover:text-muted-foreground">
+          <Link
+            href="/terms"
+            onClick={() => track('landing_footer_terms_clicked')}
+            className="text-xs text-muted-foreground/60 hover:text-muted-foreground"
+          >
             Terms of Service
           </Link>
-          <Link href="/privacy" className="text-xs text-muted-foreground/60 hover:text-muted-foreground">
+          <Link
+            href="/privacy"
+            onClick={() => track('landing_footer_privacy_clicked')}
+            className="text-xs text-muted-foreground/60 hover:text-muted-foreground"
+          >
             Privacy Policy
           </Link>
           <p className="text-xs text-muted-foreground/60">
