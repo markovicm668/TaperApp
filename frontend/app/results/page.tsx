@@ -23,7 +23,7 @@ import {
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAuth } from '@/lib/auth/useAuth';
-import { track } from '@/lib/analytics';
+import { incrementPeopleProperty, track } from '@/lib/analytics';
 import {
   buildPdfSelectionModel,
   filterResumePdfPayloadForSelection,
@@ -155,7 +155,7 @@ export default function ResultsPage() {
     }
 
     if (!user) {
-      track('guest_download_blocked');
+      track('guest_download_blocked', { trigger: 'export' });
       setGateOpen(true);
       return;
     }
@@ -202,6 +202,7 @@ export default function ResultsPage() {
         match_score: analysisResult.matchScore,
         target_role: targetRole || null,
       });
+      incrementPeopleProperty('resumes_exported');
       toast.success('PDF downloaded');
     } catch (error) {
       iosWindowRef?.close();

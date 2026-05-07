@@ -27,7 +27,22 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useHasResults } from '@/lib/resume/selectors';
+import { track } from '@/lib/analytics';
 import { AdminOnly } from './admin-only';
+
+function trackNavLinkClick(href: string) {
+  switch (href) {
+    case '/analyze':
+      track('nav_analyze_clicked');
+      break;
+    case '/results':
+      track('nav_results_clicked');
+      break;
+    case '/help':
+      track('nav_help_clicked');
+      break;
+  }
+}
 
 interface AppNavbarProps {
   userName?: string;
@@ -69,6 +84,7 @@ export function AppNavbar({
   const handleCopyReferralLink = () => {
     if (!referralLink) return;
     navigator.clipboard.writeText(referralLink);
+    track('nav_referral_link_copied');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -101,6 +117,7 @@ export function AppNavbar({
           {/* Left: Logo / Home */}
           <Link
             href="/"
+            onClick={() => track('nav_logo_clicked')}
             className="flex items-center gap-2 text-foreground transition-opacity hover:opacity-80"
           >
             <span className="font-serif text-lg font-semibold tracking-tight">
@@ -150,7 +167,7 @@ export function AppNavbar({
                         : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} onClick={() => trackNavLinkClick(item.href)}>
                       <Icon className="h-3.5 w-3.5" />
                       {item.label}
                     </Link>
@@ -193,7 +210,13 @@ export function AppNavbar({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Upgrade to Pro">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          aria-label="Upgrade to Pro"
+                          onClick={() => track('nav_upgrade_clicked')}
+                        >
                           <ArrowUpCircle className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
@@ -222,7 +245,10 @@ export function AppNavbar({
                       {plans.map((plan) => (
                         <button
                           key={plan.id}
-                          onClick={() => setSelectedPlan(plan.id)}
+                          onClick={() => {
+                            setSelectedPlan(plan.id);
+                            track('nav_upgrade_plan_selected', { plan: plan.id });
+                          }}
                           className={cn(
                             'w-full flex items-center justify-between rounded-lg border px-3.5 py-3 text-left transition-colors',
                             selectedPlan === plan.id
@@ -262,7 +288,12 @@ export function AppNavbar({
                     </div>
 
                     <div className="space-y-2">
-                      <Button className="w-full">Upgrade to Tailor Pro</Button>
+                      <Button
+                        className="w-full"
+                        onClick={() => track('nav_upgrade_confirmed_clicked', { plan: selectedPlan })}
+                      >
+                        Upgrade to Tailor Pro
+                      </Button>
                       <p className="text-center text-xs text-muted-foreground">Renews automatically · Cancel anytime</p>
                     </div>
                   </DialogContent>
@@ -278,6 +309,7 @@ export function AppNavbar({
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label="Invite friends"
+                            onClick={() => track('nav_invite_clicked')}
                           >
                             <Plus className="h-3.5 w-3.5" />
                           </Button>
@@ -327,7 +359,11 @@ export function AppNavbar({
                   </Dialog>
                 )}
 
-                <DropdownMenu>
+                <DropdownMenu
+                  onOpenChange={(open) => {
+                    if (open) track('nav_profile_menu_opened');
+                  }}
+                >
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
@@ -350,7 +386,12 @@ export function AppNavbar({
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/settings">Profile</Link>
+                      <Link
+                        href="/settings"
+                        onClick={() => track('nav_profile_settings_clicked')}
+                      >
+                        Profile
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -358,6 +399,7 @@ export function AppNavbar({
                       disabled={isSigningOut}
                       onSelect={(event) => {
                         event.preventDefault();
+                        track('nav_signout_clicked');
                         void handleSignOut();
                       }}
                     >
@@ -368,12 +410,12 @@ export function AppNavbar({
               </>
             ) : (
               <>
-                <Link href="/login">
+                <Link href="/login" onClick={() => track('nav_signin_clicked')}>
                   <Button variant="ghost" size="sm">
                     Sign in
                   </Button>
                 </Link>
-                <Link href="/login">
+                <Link href="/login" onClick={() => track('nav_get_started_clicked')}>
                   <Button size="sm" className="gap-1.5">
                     Get Started
                     <ArrowRight className="h-3.5 w-3.5" />

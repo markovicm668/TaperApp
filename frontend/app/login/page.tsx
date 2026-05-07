@@ -21,8 +21,8 @@ export default function LoginPage() {
     try {
       setIsSubmitting(true);
       track('signin_started', { method: 'google' });
-      await signInWithGoogle();
-      track('signin_completed', { method: 'google' });
+      const { isNewUser } = await signInWithGoogle();
+      track('signin_completed', { method: 'google', is_new_user: isNewUser });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sign-in failed.';
       track('signin_failed', { method: 'google', error: message });

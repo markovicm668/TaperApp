@@ -12,6 +12,7 @@ import {
 import type { User } from 'firebase/auth';
 import {
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
@@ -33,7 +34,7 @@ interface GetIdTokenOptions {
 export interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<{ isNewUser: boolean }>;
   signOut: () => Promise<void>;
   getIdToken: (options?: GetIdTokenOptions) => Promise<string | null>;
 }
@@ -90,7 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const auth = getFirebaseAuth();
     try {
-      await signInWithPopup(auth, GOOGLE_PROVIDER);
+      const credential = await signInWithPopup(auth, GOOGLE_PROVIDER);
+      return { isNewUser: getAdditionalUserInfo(credential)?.isNewUser ?? false };
     } catch (error) {
       if (isPopupBlockedError(error)) {
         // signInWithRedirect fails on mobile Safari (iOS) due to storage
@@ -104,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw error;
         }
         await signInWithRedirect(auth, GOOGLE_PROVIDER);
-        return;
+        return { isNewUser: false };
       }
       throw error;
     }

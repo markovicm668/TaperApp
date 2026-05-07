@@ -7,7 +7,7 @@ import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
-import { track } from '@/lib/analytics';
+import { incrementPeopleProperty, track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 type AnalyzeSource = 'landing' | 'analyze_page';
@@ -121,7 +121,9 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
           match_score: result.matchScore,
           duration_ms: Date.now() - analysisStartedAt,
           target_role: result.targetRole || null,
+          suggestions_count: result.rewriteSuggestions?.length ?? 0,
         });
+        incrementPeopleProperty('analyses_completed');
         onAnalyzedRef.current?.();
         apiDoneRef.current = true;
         tryNavigateToResults();
