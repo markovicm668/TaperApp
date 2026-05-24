@@ -74,7 +74,7 @@ test('exportResumePdf posts only resume payload and attaches bearer token', asyn
   });
 });
 
-test('analyzeResume maps highlight updates and routes unknown IDs to Summary', async () => {
+test('analyzeResume routes highlight updates to work, projects, and summary by id', async () => {
   let capturedAuthHeader: string | null = null;
 
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -92,11 +92,11 @@ test('analyzeResume maps highlight updates and routes unknown IDs to Summary', a
                 text: 'Built a portfolio app adopted by 2,000+ monthly users',
               },
               {
-                id: 'project-1-highlight-1',
-                text: 'Built a portfolio app adopted by 2,000+ monthly users',
+                id: '[project-1-highlight-1]',
+                text: 'Shipped a public portfolio site with case studies',
               },
               {
-                id: 'summary',
+                id: 'summary-0',
                 text: 'Results-oriented engineer rewritten for the role.',
               },
             ],
@@ -150,15 +150,85 @@ test('analyzeResume maps highlight updates and routes unknown IDs to Summary', a
 
   const projectChange = result.bulletChanges.find(c => c.section === 'Projects');
   assert.ok(projectChange);
+  // bracket wrapper "[project-1-highlight-1]" should be unwrapped before lookup
   assert.equal(projectChange?.id, 'project-1-highlight-1');
   assert.equal(projectChange?.original, 'Original project bullet');
-  assert.equal(projectChange?.improved, 'Built a portfolio app adopted by 2,000+ monthly users');
+  assert.equal(projectChange?.improved, 'Shipped a public portfolio site with case studies');
 
   const summaryChange = result.bulletChanges.find(c => c.section === 'Summary');
   assert.ok(summaryChange);
-  assert.equal(summaryChange?.id, 'summary');
+  assert.equal(summaryChange?.id, 'summary-0');
   assert.equal(summaryChange?.original, 'Original summary text.');
   assert.equal(summaryChange?.improved, 'Results-oriented engineer rewritten for the role.');
+});
+
+test('analyzeResume drops highlight updates with unknown ids instead of misrouting them to Summary', async () => {
+  globalThis.fetch = (async () => {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          ...EMPTY_AI_RESPONSE,
+          highlights: {
+            update: [
+              { id: 'work-1-highlight-1', text: 'Improved real bullet' },
+              { id: 'work-99-highlight-42', text: 'Phantom bullet that should be dropped' },
+              { id: 'summary', text: 'Wrong-id summary that should be dropped' },
+              { id: '', text: 'Empty-id update that should be dropped' },
+            ],
+          },
+        },
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  const parsedResumeData = {
+    summary: 'Original summary text.',
+    work: [
+      {
+        id: 'work-1',
+        highlights: [
+          { id: 'work-1-highlight-1', text: 'Original work bullet' },
+        ],
+      },
+    ],
+    projects: [],
+    education: [],
+    awards: [],
+    skills: [],
+    languages: [],
+    customSections: [],
+    sectionOrder: [],
+    versions: [],
+  } as unknown as Parameters<typeof analyzeResume>[2];
+
+  const originalWarn = console.warn;
+  const warnCalls: unknown[][] = [];
+  console.warn = (...args: unknown[]) => {
+    warnCalls.push(args);
+  };
+
+  try {
+    const { result } = await analyzeResume(
+      { type: 'text', content: 'Experience\n- Original work bullet' },
+      { text: 'Need someone with shipped project outcomes.' },
+      parsedResumeData
+    );
+
+    // Only the one valid update survives; nothing falls through to Summary.
+    assert.equal(result.bulletChanges.length, 1);
+    assert.equal(result.bulletChanges[0]?.section, 'Experience');
+    assert.equal(result.bulletChanges[0]?.id, 'work-1-highlight-1');
+    assert.equal(
+      result.bulletChanges.find(c => c.section === 'Summary'),
+      undefined
+    );
+    // Each unknown id should produce a warn (3 dropped: phantom, "summary", "").
+    assert.equal(warnCalls.length, 3);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test('analyzeResume retries once with refreshed token after initial 401', async () => {

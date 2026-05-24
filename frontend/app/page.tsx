@@ -58,8 +58,8 @@ export default function LandingPage() {
       <HeroA ctaHref={ctaHref} onCtaClick={handleCtaClick} authed={Boolean(user)} />
       <PainSection />
 
-      <FeaturesSection />
-      <HowItWorksSection />
+      {/* <FeaturesSection />
+      <HowItWorksSection /> */}
 
       <TryItFreeSection />
 

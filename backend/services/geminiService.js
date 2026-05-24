@@ -34,7 +34,7 @@ function serializeParsedResume(resumeData) {
   if (summary) {
     lines.push("");
     lines.push("SUMMARY");
-    lines.push(summary);
+    lines.push(`[summary-0] ${summary}`);
   }
 
   // Experience
@@ -310,7 +310,7 @@ SUMMARY RULES:
 - Preserve the candidate's actual experience level, tone, and factual claims — do not invent new experience or embellish existing experience
 - Improve ATS alignment by naturally incorporating appropriate important keywords from the JD
 - Aim for the same length and style as the original summary
-- Return updated summary in highlights section with exactly the same ID as the original summary
+- Return the rewrite in highlights.update using exactly the id "summary-0" (the bracketed id shown next to the summary text in the resume). Do not invent any other id.
 `;
   console.log("-> Gemini rewrite input data:", {
     usingParsedResume: Boolean(parsedResumeData),

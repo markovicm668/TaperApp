@@ -254,17 +254,20 @@ export async function analyzeResume(
   }
 
   const stripBracketPrefix = (s: string) => s.replace(/^\s*\[[^\]]+\]\s*/, '');
+  const unwrapBracketedId = (s: string) => s.replace(/^\s*\[([^\]]+)\]\s*$/, '$1').trim();
+  const SUMMARY_ID = 'summary-0';
 
   const highlightBulletChanges: BulletChange[] = [];
   const summaryBulletChanges: BulletChange[] = [];
 
   for (const h of ai.highlights?.update ?? []) {
-    const workText = workHighlightById.get(h.id);
-    const projectText = projectHighlightById.get(h.id);
+    const id = unwrapBracketedId(h.id ?? '');
+    const workText = workHighlightById.get(id);
+    const projectText = projectHighlightById.get(id);
 
     if (workText !== undefined) {
       highlightBulletChanges.push({
-        id: h.id,
+        id,
         section: 'Experience',
         original: workText,
         improved: h.text,
@@ -272,20 +275,22 @@ export async function analyzeResume(
       });
     } else if (projectText !== undefined) {
       highlightBulletChanges.push({
-        id: h.id,
+        id,
         section: 'Projects',
         original: projectText,
         improved: h.text,
         type: 'modified',
       });
-    } else {
+    } else if (id === SUMMARY_ID) {
       summaryBulletChanges.push({
-        id: h.id,
+        id,
         section: 'Summary',
         original: parsedResumeData?.summary ?? '',
         improved: h.text,
         type: 'modified',
       });
+    } else {
+      console.warn('[analyzeResume] Dropping highlight update with unknown id:', h.id);
     }
   }
 
