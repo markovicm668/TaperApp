@@ -23,7 +23,7 @@ function formatFileSize(bytes: number): string {
 }
 
 export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: ResumeInputCardProps) {
-  const [activeTab, setActiveTab] = useState<InputTab>('text');
+  const [activeTab, setActiveTab] = useState<InputTab>('pdf');
   const [pastedText, setPastedText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -129,7 +129,7 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
                 Resume
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
-                Paste text or upload a PDF.
+                Upload a PDF or paste text.
               </div>
             </div>
           </div>
@@ -152,18 +152,6 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
         <div className="flex gap-0.5 rounded-[10px] border border-border bg-muted/60 p-[3px]">
           <button
             type="button"
-            onClick={() => switchTab('text')}
-            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium transition-colors ${
-              activeTab === 'text'
-                ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.07)]'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Clipboard className="h-3 w-3" />
-            Paste text
-          </button>
-          <button
-            type="button"
             onClick={() => switchTab('pdf')}
             className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium transition-colors ${
               activeTab === 'pdf'
@@ -173,6 +161,18 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
           >
             <Upload className="h-3 w-3" />
             Upload PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab('text')}
+            className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium transition-colors ${
+              activeTab === 'text'
+                ? 'bg-card text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.07)]'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Clipboard className="h-3 w-3" />
+            Paste text
           </button>
         </div>
       </CardHeader>

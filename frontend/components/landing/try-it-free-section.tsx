@@ -49,7 +49,7 @@ export function TryItFreeSection() {
     <section
       id="try-it-free"
       style={{
-        padding: '72px 32px',
+        padding: '24px 32px 72px',
         scrollMarginTop: 24,
       }}
     >
@@ -68,7 +68,7 @@ export function TryItFreeSection() {
           >
             Try it free
           </div>
-          <h2
+          {/* <h2
             className="font-serif"
             style={{
               fontSize: 'clamp(28px, 3.4vw, 40px)',
@@ -91,7 +91,7 @@ export function TryItFreeSection() {
           >
             Paste your resume and a job description. We&apos;ll show you exactly what&apos;s missing,
             with rewrites you can use.
-          </p>
+          </p> */}
         </div>
 
         {user ? (
@@ -112,7 +112,7 @@ export function TryItFreeSection() {
                     {canAnalyze ? 'Ready to analyze' : 'Add inputs to continue'}
                   </p>
                   <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Free analysis — no signup needed. Sign up only if you want the polished PDF.
+                    Free analysis — no signup needed.
                   </p>
                 </div>
                 <Button

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   ArrowRight,
   Check,
+  ChevronDown,
   Download,
   FileSearch,
   ScanSearch,
@@ -55,13 +56,13 @@ export default function LandingPage() {
 
   return (
     <div>
-      <HeroA ctaHref={ctaHref} onCtaClick={handleCtaClick} authed={Boolean(user)} />
+      <HeroA />
+      <TryItFreeSection />
       <PainSection />
+      <HeroMockup ctaHref={ctaHref} onCtaClick={handleCtaClick} authed={Boolean(user)} />
 
       {/* <FeaturesSection />
       <HowItWorksSection /> */}
-
-      <TryItFreeSection />
 
       {/* CTA */}
       <section>
@@ -100,6 +101,8 @@ export default function LandingPage() {
         </div> */}
       </section>
 
+      <FaqSection />
+
       <Footer />
     </div>
   );
@@ -110,13 +113,9 @@ interface CtaProps {
   onCtaClick: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
-function HeroA({
-  ctaHref,
-  onCtaClick,
-  authed,
-}: CtaProps & { authed: boolean }) {
+function HeroA() {
   return (
-    <section style={{ padding: '72px 32px 96px', position: 'relative', overflow: 'hidden' }}>
+    <section style={{ padding: '72px 32px 24px', position: 'relative', overflow: 'hidden' }}>
       <div
         style={{
           maxWidth: 880,
@@ -166,70 +165,41 @@ function HeroA({
             fontSize: 17,
             lineHeight: 1.65,
             color: FG_2,
-            marginBottom: 40,
+            marginBottom: 0,
             maxWidth: 560,
           }}
         >
           Tailor reads your resume the way recruting software does, finds the keywords you&apos;re
           missing, and rewrites it in your voice, helping you pass every ATS scan.
         </p>
+      </div>
+    </section>
+  );
+}
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Link
-            href={ctaHref}
-            onClick={onCtaClick}
-            style={{
-              height: 48,
-              padding: '0 22px',
-              fontSize: 14.5,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'var(--primary)',
-              borderRadius: 10,
-              boxShadow: '0 1px 1px rgba(15,21,37,0.12), 0 8px 20px rgba(73,86,126,0.22)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <Zap size={15} /> {authed ? 'Analyze your resume' : 'Tailor my resume for free'}
-          </Link>
-        </div>
-
-        <div
-          style={{
-            marginTop: 22,
-            marginBottom: 56,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            fontSize: 12.5,
-            color: FG_3,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> No credit card required
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
-          </span>
-        </div>
-
+function HeroMockup({
+  ctaHref,
+  onCtaClick,
+  authed,
+}: CtaProps & { authed: boolean }) {
+  return (
+    <section style={{ padding: '32px 32px 96px', position: 'relative', overflow: 'hidden' }}>
+      <div
+        style={{
+          maxWidth: 880,
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}
+      >
         <div
           style={{
             position: 'relative',
             width: '100%',
             maxWidth: 720,
+            marginBottom: 56,
           }}
         >
           <div style={{ transform: 'rotate(-1deg)' }}>
@@ -268,6 +238,56 @@ function HeroA({
           >
             <Sparkles size={12} style={{ color: ACCENT }} /> 12 rewrite suggestions
           </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Link
+            href={ctaHref}
+            onClick={onCtaClick}
+            style={{
+              height: 48,
+              padding: '0 22px',
+              fontSize: 14.5,
+              fontWeight: 600,
+              color: '#fff',
+              background: 'var(--primary)',
+              borderRadius: 10,
+              boxShadow: '0 1px 1px rgba(15,21,37,0.12), 0 8px 20px rgba(73,86,126,0.22)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Zap size={15} /> {authed ? 'Analyze your resume' : 'Tailor my resume for free'}
+          </Link>
+        </div>
+
+        <div
+          style={{
+            marginTop: 22,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 14,
+            fontSize: 12.5,
+            color: FG_3,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Check size={12} style={{ color: 'var(--success)' }} /> No credit card required
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
+          </span>
         </div>
       </div>
     </section>
@@ -611,6 +631,102 @@ function HowItWorksSection() {
           .steps-grid :global(.step-cell:last-child) {
             border-bottom: none;
           }
+        }
+      `}</style>
+    </section>
+  );
+}
+
+function FaqSection() {
+  const faqs = [
+    {
+      q: 'What is an ATS, and why does it matter?',
+      a: 'An Applicant Tracking System is the software employers use to screen resumes before a human ever reads them. Tailor reads your resume the same way these systems do, so you can fix what would get you filtered out.',
+    },
+    {
+      q: 'Do I need to sign up to try it?',
+      a: 'No. You can run one full analysis for free — no account and no credit card. Sign up only when you want to keep tailoring and download your polished PDF.',
+    },
+    {
+      q: 'Is my resume data private?',
+      a: 'Your resume is encrypted in transit and used only to generate your analysis. We never sell it or share it with employers.',
+    },
+    {
+      q: 'What can I upload?',
+      a: 'Paste your resume as text or upload a text-extractable PDF up to 5 MB. A single-page resume gives the cleanest results.',
+    },
+    {
+      q: 'Will the rewrites still sound like me?',
+      a: 'Yes. Suggestions weave in the keywords you are missing while keeping your voice — you can accept, edit, or skip each one.',
+    },
+    {
+      q: 'How much does it cost?',
+      a: 'Your first analysis is free. After that you get free credits when you sign up, and you only pay if you need more.',
+    },
+  ];
+  return (
+    <section style={{ padding: '72px 32px 96px', borderTop: `1px solid ${BORDER_SOFT}` }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 44 }}>
+          <div style={{ ...eyebrowStyle, marginBottom: 14 }}>FAQ</div>
+          <h2
+            className="font-serif"
+            style={{
+              fontSize: 'clamp(28px, 3.4vw, 40px)',
+              fontWeight: 500,
+              lineHeight: 1.12,
+              letterSpacing: '-0.025em',
+            }}
+          >
+            Frequently asked questions
+          </h2>
+        </div>
+        <div style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
+          {faqs.map((f) => (
+            <details key={f.q} className="faq-item" style={{ borderBottom: `1px solid ${BORDER_SOFT}` }}>
+              <summary
+                className="faq-summary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  padding: '20px 4px',
+                  cursor: 'pointer',
+                  listStyle: 'none',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {f.q}
+                <ChevronDown size={18} className="faq-chevron" style={{ flexShrink: 0, color: FG_3 }} />
+              </summary>
+              <p
+                style={{
+                  margin: 0,
+                  padding: '0 4px 22px',
+                  fontSize: 14.5,
+                  lineHeight: 1.65,
+                  color: FG_2,
+                  maxWidth: 620,
+                }}
+              >
+                {f.a}
+              </p>
+            </details>
+          ))}
+        </div>
+      </div>
+      <style jsx>{`
+        .faq-summary::-webkit-details-marker {
+          display: none;
+        }
+        .faq-chevron {
+          transition: transform 0.2s ease;
+        }
+        .faq-item[open] .faq-chevron {
+          transform: rotate(180deg);
         }
       `}</style>
     </section>
