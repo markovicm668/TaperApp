@@ -649,7 +649,7 @@ function FaqSection() {
     },
     {
       q: 'Is my resume data private?',
-      a: 'Your resume is encrypted in transit and used only to generate your analysis. We never sell it or share it with employers.',
+      a: 'Your resume is encrypted in transit and used only to generate your analysis. We never keep it or share it with employers.',
     },
     {
       q: 'What can I upload?',

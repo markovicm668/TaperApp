@@ -145,7 +145,7 @@ function serializeParsedResume(resumeData) {
 
 async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.5-flash",
   });
 
   const resumeForPrompt = parsedResumeData

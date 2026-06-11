@@ -3,7 +3,7 @@ const { getEnv } = require("../config/env");
 const { validateParsedPayload } = require("./aiContracts");
 const { buildParsedPayload, normalizeStringArray } = require("./parseMappers");
 
-const DEFAULT_MODEL = process.env.GEMINI_PARSE_MODEL || "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.5-flash";
 const MAX_GEMINI_ATTEMPTS = 2;
 const GEMINI_TIMEOUT_MS = 120_000;
 
