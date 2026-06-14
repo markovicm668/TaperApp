@@ -29,6 +29,7 @@ import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAuth } from '@/lib/auth/useAuth';
 import { STAGES, STAGE_MAP, type StageDescriptor } from '@/lib/applications/stages';
+import { track } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 import type { ApplicationStatus, ApplicationSummary } from '@/lib/types';
 import {
@@ -102,10 +103,15 @@ export default function HistoryPage() {
   const [dragOverStage, setDragOverStage] = useState<ApplicationStatus | null>(null);
   const [mobileStage, setMobileStage] = useState<ApplicationStatus>('saved');
   const mobileStageInitialized = useRef(false);
+  const searchTracked = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+  useEffect(() => {
+    track('tracker_viewed');
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -180,6 +186,7 @@ export default function HistoryPage() {
             createdAt: detail.createdAt || result.createdAt,
           })
         );
+        track('tracker_application_reopened', { application_id: id });
         router.push('/results');
       } catch (err) {
         toast.error('Failed to open application', {
@@ -197,6 +204,7 @@ export default function HistoryPage() {
       await deleteApplication(id);
       setApplications(prev => prev.filter(app => app.id !== id));
       setSelectedId(current => (current === id ? null : current));
+      track('tracker_application_deleted', { application_id: id });
       toast.success('Application deleted');
     } catch (err) {
       toast.error('Failed to delete application', {
@@ -207,7 +215,23 @@ export default function HistoryPage() {
     }
   }, []);
 
-  const goToAnalyze = useCallback(() => router.push('/analyze'), [router]);
+  const goToAnalyze = useCallback(() => {
+    track('tracker_add_role_clicked');
+    router.push('/analyze');
+  }, [router]);
+
+  const handleOpenApplication = useCallback((id: string) => {
+    setSelectedId(id);
+    track('tracker_application_opened', { application_id: id });
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setQuery(value);
+    if (value && !searchTracked.current) {
+      searchTracked.current = true;
+      track('tracker_searched');
+    }
+  }, []);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -228,6 +252,11 @@ export default function HistoryPage() {
       const targetStage = String(over.id) as ApplicationStatus;
       const current = applications.find(app => app.id === id);
       if (current && current.status !== targetStage) {
+        track('tracker_stage_changed', {
+          from: current.status,
+          to: targetStage,
+          method: 'drag',
+        });
         handleStatusChange(id, targetStage);
       }
     },
@@ -298,7 +327,7 @@ export default function HistoryPage() {
             <Search className="pointer-events-none absolute left-3 h-[15px] w-[15px] text-muted-foreground" />
             <Input
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => handleSearchChange(e.target.value)}
               placeholder="Search company or role"
               className="h-10 w-full pl-9 sm:w-[230px]"
             />
@@ -345,7 +374,7 @@ export default function HistoryPage() {
                     stage={stage}
                     items={items}
                     isOver={dragOverStage === stage.id}
-                    onOpen={setSelectedId}
+                    onOpen={handleOpenApplication}
                   />
                 ))}
               </div>
@@ -385,7 +414,7 @@ export default function HistoryPage() {
             <div className="flex flex-col gap-2.5">
               {mobileItems.length > 0 ? (
                 mobileItems.map(app => (
-                  <ApplicationCardButton key={app.id} application={app} onOpen={setSelectedId} />
+                  <ApplicationCardButton key={app.id} application={app} onOpen={handleOpenApplication} />
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground/70">
@@ -403,7 +432,12 @@ export default function HistoryPage() {
         onOpenChange={open => {
           if (!open) setSelectedId(null);
         }}
-        onStatusChange={handleStatusChange}
+        onStatusChange={(id, status) => {
+          if (selectedApp && selectedApp.status !== status) {
+            track('tracker_stage_changed', { from: selectedApp.status, to: status, method: 'select' });
+          }
+          handleStatusChange(id, status);
+        }}
         onView={handleView}
         onDelete={handleDelete}
         opening={openingId === selectedId}

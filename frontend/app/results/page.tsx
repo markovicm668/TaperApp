@@ -62,7 +62,7 @@ export default function ResultsPage() {
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
   const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
   const [gateOpen, setGateOpen] = useState(false);
-  const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('modern');
+  const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('classic');
 
   useEffect(() => {
     try {
@@ -76,6 +76,7 @@ export default function ResultsPage() {
   const handleTemplateChange = (value: string) => {
     const next: ResumeTemplateId = value === 'classic' ? 'classic' : 'modern';
     setPdfTemplate(next);
+    track('resume_template_changed', { template: next });
     try {
       window.localStorage.setItem(PDF_TEMPLATE_STORAGE_KEY, next);
     } catch {
@@ -255,6 +256,7 @@ export default function ResultsPage() {
         match_score: analysisResult.matchScore,
         target_role: targetRole || null,
         template: pdfTemplate,
+        redirected_to: 'tracker',
       });
       incrementPeopleProperty('resumes_exported');
       toast.success('PDF downloaded');

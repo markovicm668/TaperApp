@@ -12,7 +12,7 @@ type AnalyticsEvent =
   | 'nav_logo_clicked'
   | 'nav_analyze_clicked'
   | 'nav_results_clicked'
-  | 'nav_history_clicked'
+  | 'nav_tracker_clicked'
   | 'nav_help_clicked'
   | 'nav_upgrade_clicked'
   | 'nav_upgrade_plan_selected'
@@ -37,7 +37,15 @@ type AnalyticsEvent =
   | 'results_viewed'
   | 'resume_exported'
   | 'resume_export_failed'
-  | 'guest_download_blocked';
+  | 'resume_template_changed'
+  | 'guest_download_blocked'
+  | 'tracker_viewed'
+  | 'tracker_application_opened'
+  | 'tracker_stage_changed'
+  | 'tracker_application_reopened'
+  | 'tracker_application_deleted'
+  | 'tracker_add_role_clicked'
+  | 'tracker_searched';
 
 type EventProps = Record<string, string | number | boolean | null | undefined>;
 

@@ -39,7 +39,7 @@ function trackNavLinkClick(href: string) {
       track('nav_results_clicked');
       break;
     case '/history':
-      track('nav_history_clicked');
+      track('nav_tracker_clicked');
       break;
     case '/help':
       track('nav_help_clicked');
