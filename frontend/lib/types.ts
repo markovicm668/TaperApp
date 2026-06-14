@@ -1,4 +1,5 @@
 import type {
+  AiParsedResumePayloadV2,
   ResumeDataV2,
   ResumeWorkspaceV2,
 } from '@resume-scanner/resume-contract';
@@ -30,6 +31,18 @@ export interface KeywordGap {
   importance: 'high' | 'medium' | 'low';
   suggestedPhrases: string[];
   category: string;
+}
+
+export interface DimensionScore {
+  value: number;
+  note?: string;
+}
+
+export interface ScoreBreakdown {
+  roleMatch?: DimensionScore;
+  skillsCoverage?: DimensionScore;
+  seniorityFit?: DimensionScore;
+  keywordAlignment?: DimensionScore;
 }
 
 export interface BulletChange {
@@ -80,6 +93,7 @@ export interface AnalysisResult {
   targetRole: string;
   company?: string;
   status: 'completed' | 'processing' | 'failed';
+  scores?: ScoreBreakdown;
   keywordGaps: KeywordGap[];
   bulletChanges: BulletChange[];
   skillCategoryRenames: Array<{ from: string; to: string }>;
@@ -96,6 +110,51 @@ export interface AnalysisHistoryItem {
   company?: string;
   matchScore: number;
   status: 'completed' | 'processing' | 'failed';
+}
+
+// Raw shape returned by the backend /analyze endpoint (Gemini output).
+// Also persisted verbatim on saved applications so they can be re-opened.
+export interface AnalyzeAiResponse {
+  meta?: {
+    matchScore?: number;
+    roleSeniority?: AnalysisResult['roleSeniority'];
+    overallFit?: AnalysisResult['overallFit'];
+    targetRole?: string;
+    company?: string;
+    scores?: Partial<Record<keyof ScoreBreakdown, { value?: unknown; note?: unknown }>>;
+    keywordGaps?: Array<{ keyword?: unknown; importance?: unknown }>;
+  };
+  highlights?: {
+    update?: Array<{ id: string; text: string }>;
+  };
+  skills?: {
+    add?: Array<{ name: string; category: string }>;
+    remove?: Array<{ id: string }>;
+  };
+  categories?: {
+    rename?: Array<{ from?: string; to?: string }>;
+  };
+}
+
+// Job tracker (Firestore `applications` collection). Status pipeline adapted
+// from career-ops templates/states.yml (MIT).
+export type ApplicationStatus = 'saved' | 'applied' | 'interview' | 'offer' | 'rejected';
+
+export interface ApplicationSummary {
+  id: string;
+  company: string;
+  targetRole: string;
+  matchScore: number;
+  scores: ScoreBreakdown | null;
+  status: ApplicationStatus;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ApplicationDetail extends ApplicationSummary {
+  jobDescription: string;
+  analysis: AnalyzeAiResponse | null;
+  parsed: AiParsedResumePayloadV2 | null;
 }
 
 export interface UserPreferences {
@@ -137,6 +196,8 @@ export interface ResumePdfPayload extends ResumeDataV2 {
   sections?: ResumeExportSection[];
   sectionOrder: string[];
 }
+
+export type ResumeTemplateId = 'modern' | 'classic';
 
 export type CanonicalResumeData = ResumeDataV2;
 export type CanonicalResumeWorkspace = ResumeWorkspaceV2;

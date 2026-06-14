@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, History, Plus, Settings, Share2, Sparkles, UserPlus } from 'lucide-react';
+import { ArrowRight, ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, LayoutGrid, Plus, Settings, Share2, Sparkles, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { addCredits } from '@/lib/api';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -38,6 +38,9 @@ function trackNavLinkClick(href: string) {
     case '/results':
       track('nav_results_clicked');
       break;
+    case '/history':
+      track('nav_history_clicked');
+      break;
     case '/help':
       track('nav_help_clicked');
       break;
@@ -53,7 +56,7 @@ interface AppNavbarProps {
 const navItems = [
   { href: '/analyze', label: 'Analyze', icon: FileSearch },
   { href: '/results', label: 'Results', icon: BarChart3, requiresResults: true },
-  // { href: '/history', label: 'History', icon: History },
+  { href: '/history', label: 'Tracker', icon: LayoutGrid },
   // { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/help', label: 'Help', icon: HelpCircle },
 ];

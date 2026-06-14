@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   verification: {
     google: 'REPLACE_WITH_YOUR_GOOGLE_VERIFICATION_CODE',
-  },
+  },  
 };
 
 export default function RootLayout({

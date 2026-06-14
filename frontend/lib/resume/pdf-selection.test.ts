@@ -45,7 +45,6 @@ function makePayload(): ResumePdfPayload {
       {
         id: 'proj-1',
         name: 'Project One',
-        description: 'Built and scaled something useful',
         technologies: [],
         highlights: [{ id: 'ph-1', text: 'Launched MVP', originalText: 'Launched MVP' }],
       },
@@ -118,19 +117,6 @@ test('work entry toggle cascades to highlights', () => {
   assert.equal(getPdfItemCheckState(model, overrides, 'item:work:highlight:work-1:wh-2'), 'unchecked');
 });
 
-test('build model includes project description as selectable child item', () => {
-  const model = buildPdfSelectionModel(makePayload());
-
-  const descriptionItem = model.items['item:projects:description:proj-1'];
-  assert.ok(descriptionItem);
-  assert.equal(descriptionItem?.kind, 'project-description');
-  assert.equal(descriptionItem?.parentKey, 'item:projects:entry:proj-1');
-  assert.equal(
-    model.items['item:projects:entry:proj-1']?.childKeys.includes('item:projects:description:proj-1'),
-    true
-  );
-});
-
 test('filtering removes single highlight and keeps rest of work entry', () => {
   const payload = makePayload();
   const model = buildPdfSelectionModel(payload);
@@ -142,24 +128,12 @@ test('filtering removes single highlight and keeps rest of work entry', () => {
   assert.equal(filtered.work[0]?.highlights[0]?.id, 'wh-1');
 });
 
-test('project entry toggle cascades to description and highlights', () => {
+test('project entry toggle cascades to highlights', () => {
   const model = buildPdfSelectionModel(makePayload());
   const overrides = togglePdfSelectionItem(model, {}, 'item:projects:entry:proj-1', false);
 
   assert.equal(getPdfItemCheckState(model, overrides, 'item:projects:entry:proj-1'), 'unchecked');
-  assert.equal(getPdfItemCheckState(model, overrides, 'item:projects:description:proj-1'), 'unchecked');
   assert.equal(getPdfItemCheckState(model, overrides, 'item:projects:highlight:proj-1:ph-1'), 'unchecked');
-});
-
-test('filtering removes unchecked project description only', () => {
-  const payload = makePayload();
-  const model = buildPdfSelectionModel(payload);
-  const overrides = togglePdfSelectionItem(model, {}, 'item:projects:description:proj-1', false);
-
-  const filtered = filterResumePdfPayloadForSelection(payload, model, overrides);
-  assert.equal(filtered.projects[0]?.description, undefined);
-  assert.equal(filtered.projects[0]?.highlights.length, 1);
-  assert.equal(filtered.projects[0]?.highlights[0]?.id, 'ph-1');
 });
 
 test('filtering removes unchecked header slot, summary, custom line, and section order entries', () => {

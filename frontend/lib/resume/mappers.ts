@@ -299,8 +299,6 @@ function buildProjectLines(projects: ResumeProjectItemV2[] | undefined, mode: 'o
 
     const dateRange = formatDateRange(entry.startDate, entry.endDate, false);
     if (dateRange) entryLines.push(dateRange);
-    const description = nonEmpty(entry.description);
-    if (description) entryLines.push(description);
 
     const technologies = (Array.isArray(entry.technologies) ? entry.technologies : [])
       .map(technology => nonEmpty(technology.name))

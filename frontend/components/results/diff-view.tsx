@@ -88,7 +88,6 @@ type SectionSelectionContext = {
   languageItemKeys: string[];
   customLineItemKeys: string[];
   entryQueues: Record<'work' | 'projects' | 'education' | 'awards', string[]>;
-  projectDescriptionKeyByEntry: Record<string, string | undefined>;
   highlightQueuesByEntry: Record<string, string[]>;
 };
 
@@ -241,7 +240,6 @@ function createSectionSelectionContext(
       education: [],
       awards: [],
     },
-    projectDescriptionKeyByEntry: {},
     highlightQueuesByEntry: {},
   };
 
@@ -269,10 +267,6 @@ function createSectionSelectionContext(
         break;
       case 'project-entry':
         ctx.entryQueues.projects.push(itemKey);
-        break;
-      case 'project-description':
-        if (!item.parentKey) break;
-        ctx.projectDescriptionKeyByEntry[item.parentKey] = itemKey;
         break;
       case 'education-entry':
         ctx.entryQueues.education.push(itemKey);
@@ -1698,21 +1692,7 @@ export function DiffView({
                   return block.rows.map(row => {
                   let rowItemKey: string | undefined;
                   let inlineTargetOverride: ResumeInlineEditTarget | undefined;
-                  if (block.entryKind === 'projects' && entryItemKey && selectionContext) {
-                    const descriptionItemKey = selectionContext.projectDescriptionKeyByEntry[entryItemKey];
-                    if (descriptionItemKey) {
-                      const matchedDescriptionKey = consumeMatchingItemKey(
-                        [descriptionItemKey],
-                        row,
-                        pdfSelectionModel
-                      );
-                      if (matchedDescriptionKey) {
-                        rowItemKey = matchedDescriptionKey;
-                        selectionContext.projectDescriptionKeyByEntry[entryItemKey] = undefined;
-                      }
-                    }
-                  }
-                  if (!rowItemKey && (block.entryKind === 'work' || block.entryKind === 'projects')) {
+                  if (block.entryKind === 'work' || block.entryKind === 'projects') {
                     rowItemKey = consumeMatchingItemKey(highlightQueue, row, pdfSelectionModel);
                   }
                   if (row.type === 'neutral' && !rowItemKey && entryItemKey) {

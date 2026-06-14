@@ -1,6 +1,80 @@
+const fs = require('fs');
+const path = require('path');
+
 function toText(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+// Template typography and fonts adapted from career-ops
+// (https://github.com/santifer/career-ops), MIT License,
+// Copyright (c) 2026 Santiago Fernandez de Valderrama.
+// Fonts are embedded as base64 data URIs so Puppeteer renders them without
+// network access; the PDF text layer stays selectable for ATS parsing.
+const FONTS_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+
+const FONT_FACES = [
+  {
+    family: 'Space Grotesk',
+    file: 'space-grotesk-latin.woff2',
+    weight: '300 700',
+    unicodeRange:
+      'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD',
+  },
+  {
+    family: 'Space Grotesk',
+    file: 'space-grotesk-latin-ext.woff2',
+    weight: '300 700',
+    unicodeRange:
+      'U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF',
+  },
+  {
+    family: 'DM Sans',
+    file: 'dm-sans-latin.woff2',
+    weight: '100 1000',
+    unicodeRange:
+      'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD',
+  },
+  {
+    family: 'DM Sans',
+    file: 'dm-sans-latin-ext.woff2',
+    weight: '100 1000',
+    unicodeRange:
+      'U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF',
+  },
+];
+
+const RESUME_TEMPLATES = ['modern', 'classic'];
+
+function normalizeTemplateId(template) {
+  const normalized = toText(template).toLowerCase();
+  return RESUME_TEMPLATES.includes(normalized) ? normalized : 'modern';
+}
+
+let cachedFontFaceCss = null;
+
+function getFontFaceCss() {
+  if (cachedFontFaceCss !== null) return cachedFontFaceCss;
+
+  cachedFontFaceCss = FONT_FACES.map((font) => {
+    try {
+      const data = fs.readFileSync(path.join(FONTS_DIR, font.file)).toString('base64');
+      return `@font-face {
+        font-family: '${font.family}';
+        src: url(data:font/woff2;base64,${data}) format('woff2');
+        font-weight: ${font.weight};
+        font-style: normal;
+        unicode-range: ${font.unicodeRange};
+      }`;
+    } catch (err) {
+      console.warn(`-> resumeTemplate: missing font asset ${font.file}; using fallback fonts.`);
+      return '';
+    }
+  })
+    .filter(Boolean)
+    .join('\n');
+
+  return cachedFontFaceCss;
 }
 
 function isNonEmptyText(value) {
@@ -328,7 +402,6 @@ function normalizeProjects(rawProjects) {
       if (!entry || typeof entry !== 'object') return null;
 
       const name = pickText(entry.name, entry.title, entry.project);
-      const description = pickText(entry.description, entry.summary);
       const technologies = asArray(entry.technologies || entry.stack || entry.tools)
         .flatMap((item) => {
           if (typeof item === 'string') return item.split(/[,|;/]/);
@@ -344,7 +417,6 @@ function normalizeProjects(rawProjects) {
 
       return {
         name,
-        description,
         technologies,
         dateRange,
         highlights,
@@ -353,7 +425,7 @@ function normalizeProjects(rawProjects) {
     .filter((entry) => {
       return Boolean(
         entry &&
-          (entry.name || entry.description || entry.technologies.length || entry.dateRange || entry.highlights.length)
+          (entry.name || entry.technologies.length || entry.dateRange || entry.highlights.length)
       );
     });
 }
@@ -594,10 +666,17 @@ function renderCanonicalSection(kind, title, contentHtml) {
 function renderWorkContent(work) {
   return work
     .map((entry) => {
-      const roleCompany = [entry.position, entry.company].filter(isNonEmptyText).join(', ');
+      const roleCompanyHtml = [
+        isNonEmptyText(entry.position) ? escapeHtml(entry.position) : '',
+        isNonEmptyText(entry.company)
+          ? `<span class="accent">${escapeHtml(entry.company)}</span>`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
       return `<div class="experience-item">
         <div class="row">
-          <div class="row-left">${escapeHtml(roleCompany)}</div>
+          <div class="row-left">${roleCompanyHtml}</div>
           ${entry.dateRange ? `<div class="row-right">${escapeHtml(entry.dateRange)}</div>` : ''}
         </div>
         ${
@@ -642,14 +721,20 @@ function renderProjectContent(projects) {
   return projects
     .map((entry) => {
       const techLine = entry.technologies.length ? entry.technologies.join(', ') : '';
-      const heading = [entry.name, techLine].filter(isNonEmptyText).join(' | ');
+      const headingHtml = [
+        isNonEmptyText(entry.name)
+          ? `<span class="accent">${escapeHtml(entry.name)}</span>`
+          : '',
+        isNonEmptyText(techLine) ? escapeHtml(techLine) : '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
       return `<div class="experience-item">
         <div class="row">
-          <div class="row-left">${escapeHtml(heading || entry.name || 'Project')}</div>
+          <div class="row-left">${headingHtml || escapeHtml('Project')}</div>
           ${entry.dateRange ? `<div class="row-right">${escapeHtml(entry.dateRange)}</div>` : ''}
         </div>
-        ${entry.description ? `<div class="sub-row"><div class="sub-left">${escapeHtml(entry.description)}</div></div>` : ''}
         ${renderDashList(entry.highlights)}
       </div>`;
     })
@@ -694,6 +779,316 @@ function renderSkillsContent(skills) {
   return skills.list.length ? `<p>${escapeHtml(skills.list.join(', '))}</p>` : '';
 }
 
+// "Modern" template: design adapted from career-ops templates/cv-template.html
+// (https://github.com/santifer/career-ops), MIT License,
+// Copyright (c) 2026 Santiago Fernandez de Valderrama.
+function getModernStyles() {
+  return `${getFontFaceCss()}
+      * { box-sizing: border-box; }
+      html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        margin: 0;
+        font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+        color: #1a1a2e;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .page {
+        padding: 0;
+      }
+      .resume-header {
+        text-align: left;
+        margin-bottom: 16px;
+      }
+      .resume-name {
+        margin: 0 0 4px;
+        font-family: "Space Grotesk", "DM Sans", "Helvetica Neue", Arial, sans-serif;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+      .resume-title {
+        margin: 0 0 6px;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: #555555;
+      }
+      .header-gradient {
+        height: 2px;
+        background: linear-gradient(to right, hsl(187, 74%, 32%), hsl(270, 70%, 45%));
+        border-radius: 1px;
+        margin: 0 0 8px;
+      }
+      .contact {
+        margin-top: 2px;
+      }
+      .contact-line {
+        font-size: 10.5px;
+        line-height: 1.4;
+        color: #555555;
+      }
+      .contact-line a {
+        color: #555555;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .contact-sep {
+        margin: 0 5px;
+        color: #cccccc;
+      }
+      .section {
+        margin-top: 14px;
+      }
+      .section:first-of-type {
+        margin-top: 0;
+      }
+      .section h2 {
+        margin: 0 0 8px;
+        padding-bottom: 4px;
+        border-bottom: 1.5px solid #e2e2e2;
+        font-family: "Space Grotesk", "DM Sans", "Helvetica Neue", Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        line-height: 1.2;
+        color: hsl(187, 74%, 32%);
+      }
+      p {
+        margin: 0 0 3px;
+        color: #2f2f2f;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      .row-left {
+        flex: 1;
+        font-family: "Space Grotesk", "DM Sans", "Helvetica Neue", Arial, sans-serif;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: #333333;
+      }
+      .row-left .accent {
+        color: hsl(270, 70%, 45%);
+      }
+      .row-right {
+        white-space: nowrap;
+        font-size: 10.5px;
+        color: #777777;
+      }
+      .sub-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-top: 1px;
+        font-size: 10px;
+        color: #888888;
+      }
+      .sub-left {
+        flex: 1;
+      }
+      .sub-right {
+        white-space: nowrap;
+      }
+      .experience-item {
+        margin-bottom: 12px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .education-item {
+        margin-bottom: 8px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .experience-item:last-child,
+      .education-item:last-child {
+        margin-bottom: 0;
+      }
+      .dash-list {
+        margin: 4px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .dash-list li {
+        position: relative;
+        margin: 0 0 3px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        line-height: 1.55;
+        color: #333333;
+      }
+      .dash-list li::before {
+        content: "-";
+        position: absolute;
+        left: 0;
+        color: #999999;
+      }
+      .skills-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .skill-row {
+        margin: 0;
+        font-size: 10.5px;
+        color: #444444;
+      }
+      .skill-label {
+        font-weight: 600;
+        color: #333333;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }`;
+}
+
+// "Classic" template: the original serif layout this app shipped with.
+function getClassicStyles() {
+  return `* { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Times New Roman", Times, serif;
+        color: #1f1f1f;
+        font-size: 12px;
+        line-height: 1.24;
+      }
+      .page {
+        padding: 0;
+      }
+      .resume-header {
+        text-align: center;
+        margin-bottom: 10px;
+      }
+      .resume-name {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+      .resume-title {
+        margin: 2px 0 0;
+        font-size: 12px;
+        font-style: italic;
+      }
+      .contact {
+        margin-top: 2px;
+      }
+      .contact-line {
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .contact-line a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .contact-sep {
+        margin: 0 4px;
+        color: #666666;
+      }
+      .section {
+        margin-top: 9px;
+      }
+      .section:first-of-type {
+        margin-top: 0;
+      }
+      .section h2 {
+        margin: 0 0 5px;
+        padding-bottom: 2px;
+        border-bottom: 1px solid #8f8f8f;
+        font-size: 11.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-variant: small-caps;
+        letter-spacing: 0.03em;
+      }
+      p {
+        margin: 0 0 3px;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      .row-left {
+        flex: 1;
+        font-weight: 700;
+      }
+      .row-right {
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      .sub-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-top: 1px;
+        font-size: 11px;
+        font-style: italic;
+      }
+      .sub-left {
+        flex: 1;
+      }
+      .sub-right {
+        white-space: nowrap;
+      }
+      .experience-item,
+      .education-item {
+        margin-bottom: 6px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .experience-item:last-child,
+      .education-item:last-child {
+        margin-bottom: 0;
+      }
+      .dash-list {
+        margin: 2px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .dash-list li {
+        position: relative;
+        margin: 1px 0;
+        padding-left: 12px;
+      }
+      .dash-list li::before {
+        content: "-";
+        position: absolute;
+        left: 0;
+        color: #666666;
+      }
+      .skills-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .skill-row {
+        margin: 0;
+      }
+      .skill-label {
+        font-weight: 700;
+      }`;
+}
+
 function validateResume(resume) {
   if (!resume || typeof resume !== 'object' || Array.isArray(resume)) {
     return { ok: false, message: 'resume must be a JSON object.' };
@@ -730,7 +1125,8 @@ function validateResume(resume) {
   return { ok: true };
 }
 
-function generateResumeHtml(resume) {
+function generateResumeHtml(resume, options = {}) {
+  const template = normalizeTemplateId(options.template);
   const basics = resume.basics || resume.header || resume;
   const rawName = pickText(basics.name, basics.fullName, resume.name, resume.fullName);
   const name = rawName || 'Resume';
@@ -871,135 +1267,7 @@ function generateResumeHtml(resume) {
     <meta charset="utf-8" />
     <title>${escapeHtml(name)} - Resume</title>
     <style>
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: "Times New Roman", Times, serif;
-        color: #1f1f1f;
-        font-size: 12px;
-        line-height: 1.24;
-      }
-      .page {
-        padding: 0;
-      }
-      .resume-header {
-        text-align: center;
-        margin-bottom: 10px;
-      }
-      .resume-name {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 700;
-        letter-spacing: 0.01em;
-      }
-      .resume-title {
-        margin: 2px 0 0;
-        font-size: 12px;
-        font-style: italic;
-      }
-      .contact {
-        margin-top: 2px;
-      }
-      .contact-line {
-        font-size: 11px;
-        line-height: 1.2;
-      }
-      .contact-line a {
-        color: inherit;
-        text-decoration: none;
-      }
-      .contact-sep {
-        margin: 0 4px;
-        color: #666666;
-      }
-      .section {
-        margin-top: 9px;
-      }
-      .section:first-of-type {
-        margin-top: 0;
-      }
-      .section h2 {
-        margin: 0 0 5px;
-        padding-bottom: 2px;
-        border-bottom: 1px solid #8f8f8f;
-        font-size: 11.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        font-variant: small-caps;
-        letter-spacing: 0.03em;
-      }
-      p {
-        margin: 0 0 3px;
-      }
-      p:last-child {
-        margin-bottom: 0;
-      }
-      .row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 12px;
-      }
-      .row-left {
-        flex: 1;
-        font-weight: 700;
-      }
-      .row-right {
-        white-space: nowrap;
-        font-size: 11px;
-      }
-      .sub-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 12px;
-        margin-top: 1px;
-        font-size: 11px;
-        font-style: italic;
-      }
-      .sub-left {
-        flex: 1;
-      }
-      .sub-right {
-        white-space: nowrap;
-      }
-      .experience-item,
-      .education-item {
-        margin-bottom: 6px;
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .experience-item:last-child,
-      .education-item:last-child {
-        margin-bottom: 0;
-      }
-      .dash-list {
-        margin: 2px 0 0;
-        padding: 0;
-        list-style: none;
-      }
-      .dash-list li {
-        position: relative;
-        margin: 1px 0;
-        padding-left: 12px;
-      }
-      .dash-list li::before {
-        content: "-";
-        position: absolute;
-        left: 0;
-        color: #666666;
-      }
-      .skills-groups {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .skill-row {
-        margin: 0;
-      }
-      .skill-label {
-        font-weight: 700;
-      }
+      ${template === 'classic' ? getClassicStyles() : getModernStyles()}
     </style>
   </head>
   <body>
@@ -1009,6 +1277,7 @@ function generateResumeHtml(resume) {
           ? `<header class="resume-header">
         <h1 class="resume-name">${escapeHtml(name)}</h1>
         ${label ? `<div class="resume-title">${escapeHtml(label)}</div>` : ''}
+        ${template === 'modern' ? '<div class="header-gradient"></div>' : ''}
         ${contactHtml}
       </header>`
           : ''
@@ -1023,4 +1292,5 @@ function generateResumeHtml(resume) {
 module.exports = {
   generateResumeHtml,
   validateResume,
+  RESUME_TEMPLATES,
 };

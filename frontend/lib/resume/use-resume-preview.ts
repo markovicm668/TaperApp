@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ResumePdfPayload } from '../types';
+import type { ResumePdfPayload, ResumeTemplateId } from '../types';
 import { fetchResumePreviewHtml } from '../api';
 
 interface PreviewState {
@@ -10,6 +10,7 @@ interface PreviewState {
 
 export function useResumePreview(
   payload: ResumePdfPayload | null,
+  template?: ResumeTemplateId,
   debounceMs = 600
 ): PreviewState {
   const [state, setState] = useState<PreviewState>({
@@ -49,7 +50,7 @@ export function useResumePreview(
       abortRef.current = controller;
 
       try {
-        const html = await fetchResumePreviewHtml(payloadRef.current!);
+        const html = await fetchResumePreviewHtml(payloadRef.current!, template);
         if (!controller.signal.aborted) {
           setState({ html, isLoading: false, error: null });
         }
@@ -69,7 +70,7 @@ export function useResumePreview(
       abortRef.current?.abort();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payloadJson, debounceMs]);
+  }, [payloadJson, template, debounceMs]);
 
   return state;
 }

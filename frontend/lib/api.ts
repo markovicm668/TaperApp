@@ -1,9 +1,16 @@
 import type {
   AnalysisResult,
+  AnalyzeAiResponse,
+  ApplicationDetail,
+  ApplicationStatus,
+  ApplicationSummary,
   BulletChange,
+  KeywordGap,
   ResumeInput,
   JobDescription,
   ResumePdfPayload,
+  ResumeTemplateId,
+  ScoreBreakdown,
 } from './types';
 import type { AiParsedResumePayloadV2 } from '@resume-scanner/resume-contract';
 
@@ -188,50 +195,59 @@ CRM: HubSpot, Zoho CRM (familiar with Salesforce basics)
 Outreach: Email sequencing, cold calling, LinkedIn Sales Navigator
 Languages: English (C1), Portuguese (native), Spanish (conversational)`;
 
-// API Functions
-export async function analyzeResume(
-  resume: ResumeInput,
-  jobDescription: JobDescription,
-  parsedResumeData?: AiParsedResumePayloadV2['resumeData']
-): Promise<{ result: AnalysisResult; parsed: AiParsedResumePayloadV2; tokensRemaining?: number }> {
-  const res = await fetchWithAuth('/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      resumeText: resume.content,
-      jobDescription: jobDescription.text,
-      inputType: resume.type,
-      fileName: resume.fileName,
-      ...(parsedResumeData ? { parsedResumeData } : {}),
-    }),
-  }, 'Analyze failed', { auth: 'optional' });
+const SCORE_DIMENSIONS: Array<keyof ScoreBreakdown> = [
+  'roleMatch',
+  'skillsCoverage',
+  'seniorityFit',
+  'keywordAlignment',
+];
 
-  const json = await res.json();
+function sanitizeScores(
+  rawScores: NonNullable<AnalyzeAiResponse['meta']>['scores']
+): ScoreBreakdown | undefined {
+  if (!rawScores || typeof rawScores !== 'object') return undefined;
 
-  if (!json || !json.data) {
-    throw new Error("Invalid API response format: missing 'data' field.");
+  const scores: ScoreBreakdown = {};
+  for (const dimension of SCORE_DIMENSIONS) {
+    const raw = rawScores[dimension];
+    if (!raw || typeof raw !== 'object') continue;
+    const value = Number(raw.value);
+    if (!Number.isFinite(value)) continue;
+    scores[dimension] = {
+      value: Math.max(0, Math.min(100, Math.round(value))),
+      note: typeof raw.note === 'string' ? raw.note : undefined,
+    };
   }
 
-  const ai = json.data as {
-    meta?: {
-      matchScore?: number;
-      roleSeniority?: AnalysisResult['roleSeniority'];
-      overallFit?: AnalysisResult['overallFit'];
-      targetRole?: string;
-      company?: string;
-    };
-    highlights?: {
-      update?: Array<{ id: string; text: string }>;
-    };
-    skills?: {
-      add?: Array<{ name: string; category: string }>;
-      remove?: Array<{ id: string }>;
-    };
-    categories?: {
-      rename?: Array<{ from?: string; to?: string }>;
-    };
-  };
+  return Object.keys(scores).length ? scores : undefined;
+}
 
+function sanitizeKeywordGaps(
+  rawGaps: NonNullable<AnalyzeAiResponse['meta']>['keywordGaps']
+): KeywordGap[] {
+  if (!Array.isArray(rawGaps)) return [];
+  return rawGaps
+    .filter(
+      (gap): gap is { keyword: string; importance?: unknown } =>
+        Boolean(gap) && typeof gap.keyword === 'string' && gap.keyword.trim().length > 0
+    )
+    .map(gap => ({
+      keyword: gap.keyword.trim(),
+      importance:
+        gap.importance === 'high' || gap.importance === 'medium' || gap.importance === 'low'
+          ? gap.importance
+          : 'medium',
+      suggestedPhrases: [],
+      category: '',
+    }));
+}
+
+// Maps the raw /analyze AI output into the client AnalysisResult. Also used
+// to rehydrate saved applications from the tracker (see getApplication).
+export function mapAnalyzeAiResult(
+  ai: AnalyzeAiResponse,
+  parsedResumeData?: AiParsedResumePayloadV2['resumeData']
+): AnalysisResult {
   const meta = ai.meta ?? {};
 
   const workHighlightById = new Map<string, string>();
@@ -328,7 +344,9 @@ export async function analyzeResume(
     company: meta.company || 'Unknown Company',
     status: 'completed',
 
-    keywordGaps: [],
+    scores: sanitizeScores(meta.scores),
+
+    keywordGaps: sanitizeKeywordGaps(meta.keywordGaps),
 
     bulletChanges: [...highlightBulletChanges, ...summaryBulletChanges, ...skillBulletChanges],
 
@@ -345,7 +363,56 @@ export async function analyzeResume(
     recommendedEdits: [],
   };
 
-  return { result, parsed: json.parsed as AiParsedResumePayloadV2, tokensRemaining: json.tokensRemaining };
+  return result;
+}
+
+// API Functions
+export async function analyzeResume(
+  resume: ResumeInput,
+  jobDescription: JobDescription,
+  parsedResumeData?: AiParsedResumePayloadV2['resumeData'],
+  parsedResumePayload?: AiParsedResumePayloadV2
+): Promise<{
+  result: AnalysisResult;
+  // Raw Gemini output, retained so an anonymous analysis can be persisted
+  // verbatim as an application after the user signs in (re-opening from
+  // history re-maps this raw shape — see mapAnalyzeAiResult).
+  analysis: AnalyzeAiResponse;
+  parsed: AiParsedResumePayloadV2;
+  applicationId?: string | null;
+  tokensRemaining?: number;
+}> {
+  const res = await fetchWithAuth('/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resumeText: resume.content,
+      jobDescription: jobDescription.text,
+      inputType: resume.type,
+      fileName: resume.fileName,
+      ...(parsedResumeData ? { parsedResumeData } : {}),
+      // Full parse payload (source/sections) lets the backend persist the
+      // application with enough fidelity to re-open it from history.
+      ...(parsedResumePayload ? { parsedResumePayload } : {}),
+    }),
+  }, 'Analyze failed', { auth: 'optional' });
+
+  const json = await res.json();
+
+  if (!json || !json.data) {
+    throw new Error("Invalid API response format: missing 'data' field.");
+  }
+
+  const analysis = json.data as AnalyzeAiResponse;
+  const result = mapAnalyzeAiResult(analysis, parsedResumeData);
+
+  return {
+    result,
+    analysis,
+    parsed: json.parsed as AiParsedResumePayloadV2,
+    applicationId: json.applicationId ?? null,
+    tokensRemaining: json.tokensRemaining,
+  };
 }
 
 export async function parseResume(request: {
@@ -412,23 +479,104 @@ export async function parseResumePdf(
   return parsed;
 }
 
-export async function fetchResumePreviewHtml(resume: ResumePdfPayload): Promise<string> {
+export async function fetchResumePreviewHtml(
+  resume: ResumePdfPayload,
+  template?: ResumeTemplateId
+): Promise<string> {
   const res = await fetchWithAuth('/export/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume }),
+    body: JSON.stringify({ resume, ...(template ? { template } : {}) }),
   }, 'Preview generation failed', { auth: 'optional' });
 
   const json = await res.json();
   return json.html as string;
 }
 
-export async function exportResumePdf(resume: ResumePdfPayload): Promise<Blob> {
+export async function exportResumePdf(
+  resume: ResumePdfPayload,
+  template?: ResumeTemplateId
+): Promise<Blob> {
   const res = await fetchWithAuth('/export/pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume }),
+    body: JSON.stringify({ resume, ...(template ? { template } : {}) }),
   }, 'PDF export failed');
 
   return res.blob();
+}
+
+// Job tracker (saved applications)
+
+// Persists a pre-computed analysis as a tracked application. Used to save the
+// work an anonymous user tailored before they signed in (authenticated
+// analyses are saved server-side by /analyze).
+export interface CreateApplicationPayload {
+  company: string;
+  targetRole: string;
+  jobDescription: string;
+  matchScore: number;
+  scores: ScoreBreakdown | null;
+  analysis: AnalyzeAiResponse;
+  parsed: AiParsedResumePayloadV2;
+}
+
+export async function createApplication(
+  payload: CreateApplicationPayload
+): Promise<{ id: string }> {
+  const res = await fetchWithAuth(
+    '/applications',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'Failed to save application'
+  );
+  const json = await res.json();
+  return json.application as { id: string };
+}
+
+export async function listApplications(): Promise<ApplicationSummary[]> {
+  const res = await fetchWithAuth('/applications', { method: 'GET' }, 'Failed to load applications');
+  const json = await res.json();
+  return (json.applications ?? []) as ApplicationSummary[];
+}
+
+export async function getApplication(id: string): Promise<ApplicationDetail> {
+  const res = await fetchWithAuth(
+    `/applications/${encodeURIComponent(id)}`,
+    { method: 'GET' },
+    'Failed to load application'
+  );
+  const json = await res.json();
+  if (!json?.application) {
+    throw new Error('Invalid API response format: missing application.');
+  }
+  return json.application as ApplicationDetail;
+}
+
+export async function updateApplicationStatus(
+  id: string,
+  status: ApplicationStatus
+): Promise<ApplicationSummary> {
+  const res = await fetchWithAuth(
+    `/applications/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    },
+    'Failed to update application status'
+  );
+  const json = await res.json();
+  return json.application as ApplicationSummary;
+}
+
+export async function deleteApplication(id: string): Promise<void> {
+  await fetchWithAuth(
+    `/applications/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+    'Failed to delete application'
+  );
 }

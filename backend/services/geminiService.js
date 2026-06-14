@@ -77,7 +77,6 @@ function serializeParsedResume(resumeData) {
       if (entry.role) lines.push(`Role: ${entry.role}`);
       const techs = (entry.technologies || []).map((t) => t.name).filter(Boolean).join(", ");
       if (techs) lines.push(`Technologies: ${techs}`);
-      if (entry.description) lines.push(`Description: ${entry.description}`);
       (entry.highlights || []).forEach((h) => {
         if (h.text) lines.push(`[${h.id}] ${h.text}`);
       });
@@ -153,63 +152,7 @@ async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
     : resumeText;
 
     console.log("-> Serialized resume for prompt:", resumeForPrompt);
-
-  // const prompt = `
-  // You are an ATS resume optimizer. You improve EXPERIENCE section bullets AND the SKILLS section.
-
-  // JOB DESCRIPTION:
-  // ${jobDescription}
-
-  // RESUME:
-  // ${resumeForPrompt}
-
-  // Return STRICT JSON ONLY with this schema:
-  // {
-  //   "matchScore": number (0-100),
-  //   "overallFit": "poor" | "fair" | "good" | "great",
-  //   "targetRole": string,
-  //   "company": string,
-  //   "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
-  //   "rewrittenBullets": [
-  //     {
-  //       "section": "experience" | "projects" | "skills",
-  //       "type": "modified" | "added" | "removed",
-  //       "original": string,
-  //       "improved": string,
-  //       "rationale": string
-  //     }
-  //   ],
-  //   "skillCategoryRenames": [
-  //     { "from": "exact current category name", "to": "new category name" }
-  //   ]
-  // }
-
-  // Rules:
-  // - Output valid JSON only
-  // - No markdown
-  // - No commentary outside JSON
-  // - Ensure matchScore is an integer
-  // - Infer targetRole and company from the JOB DESCRIPTION (or use empty string if unknown)
-  // - "section" must be one of: experience, projects, skills
-
-  // EXPERIENCE bullets (section: "experience" or "projects"):
-  // - For each bullet, provide one improved version that is action-led and aligned to the JOB DESCRIPTION
-  // - Do not invent new bullets
-  // - "original" must be verbatim from the resume bullet text
-  // - "improved" should be one bullet line, action-led, and aligned to the JD
-  // - type must be "modified"
-
-  // SKILLS (section: "skills"):
-  // - Suggest skill additions that are clearly required or preferred by the JOB DESCRIPTION but missing from the resume (type: "added", original: "", improved: "[CategoryName] skill name" — prefix with the target category in square brackets). IMPORTANT: the CategoryName MUST be one of the exact category names already present in the resume (e.g. if the resume has "Soft", use "[Soft]" not "[Soft Skills]"). Only create a new category name if no existing category is a reasonable fit.
-  // - Feel free to to change any skill and any category names to be more aligned with the JOB DESCRIPTION (type: "modified", original: "SkillName" or "CategoryName", improved: "NewName")
-  // - Remove skills that are clearly not relevant to the JOB DESCRIPTION (type: "removed", original: "SkillName", improved: "")
-  // - Do not add or remove more than 5 skills in total
-  // - For category renames, only rename if it improves alignment with the JOB DESCRIPTION
-  // - Try to keep the same number of skills in each category unless the JOB DESCRIPTION indicates a clear need for more or fewer skills in that category
-  // - Try not to have less than 2 skills in a category
-
-  // `;
-
+    
   const prompt = `
 You are an ATS resume optimization engine.
 
@@ -238,7 +181,19 @@ Return STRICT JSON ONLY with this schema:
     "overallFit": "poor" | "fair" | "good" | "great",
     "targetRole": string,
     "company": string,
-    "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive"
+    "roleSeniority": "junior" | "mid" | "senior" | "lead" | "executive",
+    "scores": {
+      "roleMatch": { "value": number, "note": string },
+      "skillsCoverage": { "value": number, "note": string },
+      "seniorityFit": { "value": number, "note": string },
+      "keywordAlignment": { "value": number, "note": string }
+    },
+    "keywordGaps": [
+      {
+        "keyword": string,
+        "importance": "high" | "medium" | "low"
+      }
+    ]
   },
 
   "highlights": {
@@ -282,6 +237,22 @@ Rules:
   - 40-59 = fair
   - 60-79 = good
   - 80-100 = great
+
+SCORING RULES:
+- Every value in meta.scores must be an integer from 0 to 100, judged against the JOB DESCRIPTION only:
+  - roleMatch: how well the candidate's actual experience aligns with the target role's responsibilities
+  - skillsCoverage: how many of the required/preferred skills are present on the resume
+  - seniorityFit: candidate's level vs the role's level (overqualified and underqualified both lower the score)
+  - keywordAlignment: how well the resume's wording matches the important ATS keywords in the JD
+- Each note must be ONE short sentence explaining the score (mention the strongest evidence or the biggest gap)
+- meta.matchScore must be consistent with the breakdown: a weighted roll-up of roleMatch (30%), skillsCoverage (30%), keywordAlignment (25%), seniorityFit (15%), rounded to an integer
+- Score the resume AS PROVIDED, before your suggested improvements
+
+KEYWORD GAP RULES:
+- meta.keywordGaps lists keywords/phrases that are important in the JOB DESCRIPTION but missing (or too weak) on the resume
+- importance: "high" = required/core to the role, "medium" = preferred or repeated, "low" = nice to have
+- At most 10 entries, most important first; use [] if nothing meaningful is missing
+- Never list a keyword the resume already clearly contains
 - Infer targetRole and company from the job description
 - Use empty string if unknown
 - Do not invent technologies, metrics, achievements, or responsibilities

@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
+import { savePendingApplication } from '@/lib/analyze/pendingApplication';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
@@ -90,14 +91,16 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
 
         // Step 2: Run full analysis (costs 3 tokens for authed users).
         // Pass the already-parsed resumeData so the backend skips re-parsing.
-        const { result, parsed, tokensRemaining } = await analyzeResume(
+        const { tokensRemaining: _parseTokens, ...parsedPayloadForSave } = parseResult;
+        const { result, analysis, parsed, applicationId, tokensRemaining } = await analyzeResume(
           {
             type: resumeData.type,
             content: resumeData.file ? '' : resumeData.content,
             fileName: resumeData.fileName,
           },
           { text: jobDescription },
-          parseResult.resumeData
+          parseResult.resumeData,
+          parsedPayloadForSave
         );
 
         if (tokensRemaining !== undefined) {
@@ -106,6 +109,21 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
 
         if (parsed && parsed.source) {
           setParsedPayload(parsed);
+        }
+
+        // Anonymous analyses aren't saved server-side (no applicationId). Stash
+        // the result so it can be persisted to history once the user signs in
+        // (e.g. via the download gate). See results/page.tsx flush effect.
+        if (!applicationId && parsed) {
+          savePendingApplication({
+            company: result.company ?? '',
+            targetRole: result.targetRole ?? '',
+            jobDescription,
+            matchScore: result.matchScore ?? 0,
+            scores: result.scores ?? null,
+            analysis,
+            parsed,
+          });
         }
 
         const resultWithSource: AnalysisResult = {

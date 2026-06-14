@@ -83,7 +83,7 @@ Task:
   - summary string if provided
   - work[] (id, company, position, location object, startDate, endDate, isCurrent, highlights[] objects)
   - education[] (id, institution, degree, area, startDate, endDate, location object, optional gpa/honors)
-  - projects[] (id, name, role, description, technologies[] objects, startDate, endDate, highlights[] objects)
+  - projects[] (id, name, role, technologies[] objects, startDate, endDate, highlights[] objects)
   - awards[] (id, title, issuer, date, summary)
   - skills as array of objects ({ id, name, category })
   - languages[] (language, fluency)
@@ -172,7 +172,6 @@ Output schema (JSON):
         "id": "string",
         "name": "string",
         "role": "string",
-        "description": "string",
         "technologies": [{ "skillRefId": "string", "name": "string" }],
         "startDate": "string",
         "endDate": "string",

@@ -92,7 +92,6 @@ export interface ResumeProjectItemV2 {
   id?: string;
   name?: string;
   role?: string;
-  description?: string;
   technologies: ResumeTechnologyV2[];
   startDate?: string;
   endDate?: string;
@@ -258,6 +257,18 @@ export interface RecommendedEdit {
   completed: boolean;
 }
 
+export interface AnalysisDimensionScoreV1 {
+  value: number;
+  note?: string;
+}
+
+export interface AnalysisScoreBreakdownV1 {
+  roleMatch?: AnalysisDimensionScoreV1;
+  skillsCoverage?: AnalysisDimensionScoreV1;
+  seniorityFit?: AnalysisDimensionScoreV1;
+  keywordAlignment?: AnalysisDimensionScoreV1;
+}
+
 export interface AnalysisSnapshotV1 {
   id: string;
   createdAt: string;
@@ -267,6 +278,7 @@ export interface AnalysisSnapshotV1 {
   targetRole: string;
   company?: string;
   status: 'completed' | 'processing' | 'failed';
+  scores?: AnalysisScoreBreakdownV1;
   keywordGaps: KeywordGap[];
   bulletChanges: BulletChange[];
   skillCategoryRenames: Array<{ from: string; to: string }>;

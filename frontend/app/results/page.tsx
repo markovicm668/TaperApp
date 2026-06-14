@@ -7,12 +7,24 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
 import { ResumePreview } from '@/components/results/resume-preview';
+import { ScoreBreakdownPanel } from '@/components/results/score-breakdown';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { DownloadGateDialog } from '@/components/results/download-gate-dialog';
 import { Button } from '@/components/ui/button';
-import { exportResumePdf } from '@/lib/api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { createApplication, exportResumePdf } from '@/lib/api';
+import {
+  clearPendingApplication,
+  readPendingApplication,
+} from '@/lib/analyze/pendingApplication';
 import { useResumePreview } from '@/lib/resume/use-resume-preview';
-import type { ResumePdfPayload } from '@/lib/types';
+import type { ResumePdfPayload, ResumeTemplateId } from '@/lib/types';
 import {
   useBulletChanges,
   useCanonicalParsePayload,
@@ -34,6 +46,7 @@ import {
 import { AdminOnly } from '@/components/admin-only';
 
 const PDF_SELECTION_STORAGE_KEY = 'resumePdfSelection.v1';
+const PDF_TEMPLATE_STORAGE_KEY = 'resumePdfTemplate.v1';
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -49,6 +62,26 @@ export default function ResultsPage() {
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
   const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
   const [gateOpen, setGateOpen] = useState(false);
+  const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('modern');
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(PDF_TEMPLATE_STORAGE_KEY);
+      if (stored === 'classic' || stored === 'modern') setPdfTemplate(stored);
+    } catch {
+      // Ignore storage read failures and keep the default template.
+    }
+  }, []);
+
+  const handleTemplateChange = (value: string) => {
+    const next: ResumeTemplateId = value === 'classic' ? 'classic' : 'modern';
+    setPdfTemplate(next);
+    try {
+      window.localStorage.setItem(PDF_TEMPLATE_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage write failures and keep the in-memory choice.
+    }
+  };
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -58,6 +91,26 @@ export default function ResultsPage() {
       router.push(user ? '/analyze' : '/');
     }
   }, [analysisResult, isHydrated, router, user]);
+
+  // Persist work tailored while anonymous once the user signs in (e.g. via the
+  // download gate). The pending blob was stashed during analyze; flushing it
+  // here lands it in the History tab. Guarded so it POSTs at most once.
+  const pendingFlushedRef = useRef(false);
+  useEffect(() => {
+    if (!user || pendingFlushedRef.current) return;
+    const pending = readPendingApplication();
+    if (!pending) return;
+
+    pendingFlushedRef.current = true;
+    createApplication(pending)
+      .then(() => clearPendingApplication())
+      .catch(error => {
+        // Non-fatal: the user still has their results on screen. Allow a retry
+        // on the next sign-in/render rather than dropping the work silently.
+        pendingFlushedRef.current = false;
+        console.error('Failed to persist pre-signin application:', error);
+      });
+  }, [user]);
 
   const resultsViewedRef = useRef(false);
   useEffect(() => {
@@ -172,7 +225,7 @@ export default function ResultsPage() {
         pdfSelectionModel
           ? filterResumePdfPayloadForSelection(exportResumePayload, pdfSelectionModel, pdfSelectionOverrides)
           : exportResumePayload;
-      const blob = await exportResumePdf(payloadForExport);
+      const blob = await exportResumePdf(payloadForExport, pdfTemplate);
       const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
       const titleSlug = (targetRole || '').replace(/\s+/g, '_');
       const fileName = (titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`)
@@ -201,9 +254,13 @@ export default function ResultsPage() {
       track('resume_exported', {
         match_score: analysisResult.matchScore,
         target_role: targetRole || null,
+        template: pdfTemplate,
       });
       incrementPeopleProperty('resumes_exported');
       toast.success('PDF downloaded');
+      // Send the user straight to the tracker to manage the application they
+      // just tailored.
+      router.push('/history');
     } catch (error) {
       iosWindowRef?.close();
       const message = error instanceof Error ? error.message : 'Unknown error.';
@@ -288,6 +345,8 @@ export default function ResultsPage() {
     matchScore,
     targetRole,
     company,
+    overallFit,
+    scores,
   } = analysisResult;
 
   const hasOriginal = sectionRows.some(row => row.hasContent);
@@ -300,7 +359,7 @@ export default function ResultsPage() {
       : exportResumePayload;
   }, [exportResumePayload, pdfSelectionModel, pdfSelectionOverrides]);
 
-  const preview = useResumePreview(previewPayload);
+  const preview = useResumePreview(previewPayload, pdfTemplate);
 
   return (
     <div className="mx-auto w-full max-w-[1340px]">
@@ -319,10 +378,27 @@ export default function ResultsPage() {
           </h1>
           <span className="inline-flex flex-shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
             Match Score&nbsp;&nbsp;{matchScore}
+            {overallFit && (
+              <span className="ml-1.5 border-l border-primary/25 pl-1.5 font-medium capitalize text-primary/80">
+                {overallFit} fit
+              </span>
+            )}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={pdfTemplate} onValueChange={handleTemplateChange}>
+            <SelectTrigger
+              className="h-8 w-[122px] text-[13px]"
+              aria-label="Resume template"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="modern">Modern</SelectItem>
+              <SelectItem value="classic">Classic</SelectItem>
+            </SelectContent>
+          </Select>
           <SectionOrderDialog
             sections={sectionRows}
             onOrderChange={setSectionOrder}
@@ -349,6 +425,8 @@ export default function ResultsPage() {
       </div>
 
       <DownloadGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+
+      <ScoreBreakdownPanel scores={scores} />
 
       <section className="w-full" aria-label="Diff View">
         <div className="relative grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">

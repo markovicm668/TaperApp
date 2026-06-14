@@ -14,14 +14,14 @@ function createExportRouter({
   // the client already has, no AI/LLM cost. PDF export below requires auth.
   router.post("/preview", async (req, res) => {
     try {
-      const { resume } = req.body || {};
+      const { resume, template } = req.body || {};
       const validation = validate(resume);
       if (!validation.ok) {
         return res.status(400).json({
           error: { code: "INVALID_INPUT", message: validation.message },
         });
       }
-      const html = renderResumeHtml(resume);
+      const html = renderResumeHtml(resume, { template });
       return res.status(200).json({ html });
     } catch (err) {
       console.error("-> Preview error:", err);
@@ -36,7 +36,7 @@ function createExportRouter({
 
   router.post("/pdf", requireAuth, async (req, res) => {
     try {
-      const { resume } = req.body || {};
+      const { resume, template } = req.body || {};
       console.log("-> PDF export request received.");
 
       const validation = validate(resume);
@@ -49,7 +49,7 @@ function createExportRouter({
         });
       }
 
-      const html = renderResumeHtml(resume);
+      const html = renderResumeHtml(resume, { template });
       const pdfBuffer = await renderPdf(html);
 
       res.setHeader("Content-Type", "application/pdf");

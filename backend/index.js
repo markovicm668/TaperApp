@@ -9,6 +9,7 @@ const parseRoute = require("./routes/parse");
 const parsePdfRoute = require("./routes/parsePdf");
 const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
+const applicationsRoute = require("./routes/applications");
 const requireAuth = require("./middleware/requireAuth");
 const requireTokens = require("./middleware/requireTokens");
 const optionalAuth = require("./middleware/optionalAuth");
@@ -36,7 +37,7 @@ const corsOrigins = corsAllowedOrigin
 app.use(
   cors({
     origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -50,6 +51,7 @@ app.use("/parse-pdf", optionalAuth, optionalTokens(1), parsePdfRoute);
 // /export/preview is anonymous-friendly; /export/pdf has its own requireAuth
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);
+app.use("/applications", requireAuth, applicationsRoute);
 
 // 404
 app.use((req, res) => {

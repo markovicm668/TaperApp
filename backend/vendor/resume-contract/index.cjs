@@ -443,7 +443,6 @@ function parseResumeProjectItemV2(value, path) {
     id: asString(obj.id, `${path}.id`, { optional: true }) || createId('project'),
     name: asString(obj.name, `${path}.name`, { optional: true }),
     role: asString(obj.role, `${path}.role`, { optional: true }),
-    description: asString(obj.description, `${path}.description`, { optional: true }),
     technologies,
     startDate: asString(obj.startDate, `${path}.startDate`, { optional: true }),
     endDate: asString(obj.endDate, `${path}.endDate`, { optional: true }),
@@ -455,7 +454,6 @@ function parseResumeProjectItemV2(value, path) {
   const hasAny =
     Boolean(project.name) ||
     Boolean(project.role) ||
-    Boolean(project.description) ||
     project.technologies.length > 0 ||
     Boolean(project.startDate) ||
     Boolean(project.endDate) ||
@@ -849,6 +847,28 @@ function parseRecommendedEdit(value, path) {
   };
 }
 
+function parseAnalysisDimensionScore(value, path) {
+  const obj = assertObject(value, path);
+  return {
+    value: asNumber(obj.value, `${path}.value`),
+    note: asString(obj.note, `${path}.note`, { optional: true }),
+  };
+}
+
+function parseAnalysisScores(value, path) {
+  const obj = assertObject(value, path);
+  const dimension = (key) =>
+    obj[key] === undefined || obj[key] === null
+      ? undefined
+      : parseAnalysisDimensionScore(obj[key], `${path}.${key}`);
+  return {
+    roleMatch: dimension('roleMatch'),
+    skillsCoverage: dimension('skillsCoverage'),
+    seniorityFit: dimension('seniorityFit'),
+    keywordAlignment: dimension('keywordAlignment'),
+  };
+}
+
 function parseAnalysisSnapshot(value, path = 'analysisSnapshot') {
   const obj = assertObject(value, path);
   return {
@@ -864,6 +884,10 @@ function parseAnalysisSnapshot(value, path = 'analysisSnapshot') {
     targetRole: asString(obj.targetRole, `${path}.targetRole`),
     company: asString(obj.company, `${path}.company`, { optional: true }),
     status: asEnum(obj.status, ['completed', 'processing', 'failed'], `${path}.status`),
+    scores:
+      obj.scores === undefined || obj.scores === null
+        ? undefined
+        : parseAnalysisScores(obj.scores, `${path}.scores`),
     keywordGaps: asArray(obj.keywordGaps, `${path}.keywordGaps`, parseKeywordGap, []),
     bulletChanges: asArray(obj.bulletChanges, `${path}.bulletChanges`, parseBulletChange, []),
     skillCategoryRenames: asArray(

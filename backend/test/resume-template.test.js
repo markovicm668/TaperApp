@@ -33,7 +33,7 @@ test('generateResumeHtml omits empty summary section', () => {
   assert.equal(html.includes('section-work'), true);
 });
 
-test('generateResumeHtml uses classic layout styling', () => {
+test('generateResumeHtml uses modern layout styling with embedded fonts', () => {
   const resume = {
     basics: {
       name: 'Jane Doe',
@@ -55,9 +55,44 @@ test('generateResumeHtml uses classic layout styling', () => {
   };
 
   const html = generateResumeHtml(resume);
-  assert.equal(html.includes('font-family: "Times New Roman", Times, serif;'), true);
+  assert.equal(html.includes('font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;'), true);
+  assert.equal(html.includes("font-family: 'Space Grotesk';"), true);
+  assert.equal(html.includes('data:font/woff2;base64,'), true);
   assert.equal(html.includes('class="resume-header"'), true);
+  assert.equal(html.includes('class="header-gradient"'), true);
   assert.equal(html.includes('text-transform: uppercase;'), true);
+});
+
+test('generateResumeHtml renders the classic template when requested', () => {
+  const resume = {
+    basics: {
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+    },
+    summary: 'Product-minded engineer.',
+    work: [
+      {
+        position: 'Engineer',
+        company: 'Example Corp',
+        highlights: ['Built backend APIs'],
+      },
+    ],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+  };
+
+  const html = generateResumeHtml(resume, { template: 'classic' });
+  assert.equal(html.includes('font-family: "Times New Roman", Times, serif;'), true);
+  assert.equal(html.includes('class="header-gradient"'), false);
+  assert.equal(html.includes('data:font/woff2;base64,'), false);
+  assert.equal(html.includes('class="resume-header"'), true);
+
+  // Unknown template ids fall back to modern.
+  const fallbackHtml = generateResumeHtml(resume, { template: 'bogus' });
+  assert.equal(fallbackHtml.includes('font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;'), true);
 });
 
 test('generateResumeHtml renders projects/awards/languages from canonical data', () => {

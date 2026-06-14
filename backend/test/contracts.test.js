@@ -55,6 +55,45 @@ test('analysisSnapshotSchema accepts completed analysis snapshot payload', () =>
   assert.equal(parsed.success, true);
 });
 
+test('analysisSnapshotSchema round-trips dimension scores and keyword gaps', () => {
+  const analysis = {
+    id: 'analysis-2',
+    createdAt: new Date().toISOString(),
+    matchScore: 72,
+    roleSeniority: 'mid',
+    overallFit: 'good',
+    targetRole: 'Business Development Representative',
+    company: 'Example Co',
+    status: 'completed',
+    scores: {
+      roleMatch: { value: 78, note: 'Strong outbound prospecting overlap.' },
+      skillsCoverage: { value: 70, note: 'Salesforce experience is missing.' },
+      seniorityFit: { value: 85, note: 'Experience matches the 2+ year requirement.' },
+      keywordAlignment: { value: 60, note: 'JD keywords are underrepresented.' },
+    },
+    keywordGaps: [
+      { keyword: 'Salesforce', importance: 'high', suggestedPhrases: [], category: '' },
+    ],
+    bulletChanges: [],
+    rewriteSuggestions: [],
+    atsChecks: [],
+    riskFlags: [],
+    recommendedEdits: [],
+  };
+
+  const parsed = analysisSnapshotSchema.safeParse(analysis);
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.data.scores.roleMatch.value, 78);
+  assert.equal(parsed.data.scores.keywordAlignment.note, 'JD keywords are underrepresented.');
+  assert.equal(parsed.data.keywordGaps[0].keyword, 'Salesforce');
+
+  // Snapshots persisted before scores existed must still parse.
+  const { scores: _omitted, ...legacy } = analysis;
+  const legacyParsed = analysisSnapshotSchema.safeParse(legacy);
+  assert.equal(legacyParsed.success, true);
+  assert.equal(legacyParsed.data.scores, undefined);
+});
+
 test('aiParsedResumePayloadSchema accepts optional dynamic section metadata', () => {
   const now = new Date().toISOString();
   const payload = {

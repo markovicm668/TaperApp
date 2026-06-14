@@ -37,7 +37,6 @@ function makeResumeData(): ResumeDataV2 {
         id: 'proj-1',
         name: 'Project One',
         role: 'Owner',
-        description: 'Desc',
         technologies: [
           { skillRefId: 'tech-1', name: 'React' },
           { skillRefId: 'tech-2', name: 'Node.js' },
@@ -78,8 +77,8 @@ function makeResumeData(): ResumeDataV2 {
 }
 
 test('parses direct item and entry keys into inline edit targets', () => {
-  const itemTarget = parseResumeInlineItemTarget('item:projects:description:proj-1');
-  assert.deepEqual(itemTarget, { kind: 'item', itemKey: 'item:projects:description:proj-1' });
+  const itemTarget = parseResumeInlineItemTarget('item:projects:highlight:proj-1:ph-1');
+  assert.deepEqual(itemTarget, { kind: 'item', itemKey: 'item:projects:highlight:proj-1:ph-1' });
 
   const entryRef = parseResumeInlineEntryItemKey('item:education:entry:edu-1');
   assert.deepEqual(entryRef, {

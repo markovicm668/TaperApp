@@ -327,7 +327,6 @@ function normalizeProjects(projectsCandidate) {
         id: sanitizeString(item.id) || `project-${index + 1}`,
         name: sanitizeString(item.name || item.title || item.project),
         role: sanitizeString(item.role),
-        description: sanitizeString(item.description || item.summary),
         technologies,
         startDate: sanitizeString(item.startDate || item.start || item.from),
         endDate: sanitizeString(item.endDate || item.end || item.to),
@@ -339,7 +338,6 @@ function normalizeProjects(projectsCandidate) {
       const hasAny =
         Boolean(normalized.name) ||
         Boolean(normalized.role) ||
-        Boolean(normalized.description) ||
         normalized.technologies.length > 0 ||
         Boolean(normalized.startDate) ||
         Boolean(normalized.endDate) ||

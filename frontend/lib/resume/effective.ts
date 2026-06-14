@@ -271,7 +271,6 @@ function hasProjectContent(entry: ResumeProjectItemV2): boolean {
   return Boolean(
     entry.name ||
       entry.role ||
-      entry.description ||
       entry.startDate ||
       entry.endDate ||
       entry.repository ||

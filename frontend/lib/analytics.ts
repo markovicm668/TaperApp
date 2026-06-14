@@ -12,6 +12,7 @@ type AnalyticsEvent =
   | 'nav_logo_clicked'
   | 'nav_analyze_clicked'
   | 'nav_results_clicked'
+  | 'nav_history_clicked'
   | 'nav_help_clicked'
   | 'nav_upgrade_clicked'
   | 'nav_upgrade_plan_selected'

@@ -577,7 +577,6 @@ test('applyInlineEdit updates project technologies, education honors, and custom
               id: 'proj-1',
               name: 'Project One',
               role: 'Owner',
-              description: 'Desc',
               technologies: [
                 { skillRefId: 's1', name: 'React' },
                 { skillRefId: 's2', name: 'Node.js' },

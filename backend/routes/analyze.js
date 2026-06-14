@@ -3,6 +3,7 @@ const router = express.Router();
 const { analyzeResume } = require("../services/geminiService");
 const { parseResumeSections } = require("../services/geminiParseService");
 const { claimReferralReward } = require("../services/referralService");
+const { createApplication } = require("../services/applicationService");
 
 router.post("/", async (req, res) => {
   const sw = { _start: Date.now(), _steps: [] };
@@ -13,7 +14,7 @@ router.post("/", async (req, res) => {
   };
 
   try {
-    const { resumeText, jobDescription, inputType, fileName, parsedResumeData } = req.body;
+    const { resumeText, jobDescription, inputType, fileName, parsedResumeData, parsedResumePayload } = req.body;
 
     if ((!resumeText && !parsedResumeData) || !jobDescription) {
       return res.status(400).json({
@@ -26,7 +27,14 @@ router.post("/", async (req, res) => {
 
     let parseResult;
     if (parsedResumeData) {
-      parseResult = { payload: { resumeData: parsedResumeData } };
+      // Prefer the full parse payload (source, sections) when the client
+      // sends it, so the saved application can be re-opened with full
+      // fidelity; fall back to wrapping the bare resumeData.
+      const payload =
+        parsedResumePayload && parsedResumePayload.resumeData
+          ? parsedResumePayload
+          : { resumeData: parsedResumeData };
+      parseResult = { payload };
       lap("parse (pre-parsed)");
     } else {
       parseResult = await parseResumeSections({
@@ -55,7 +63,28 @@ router.post("/", async (req, res) => {
       );
     }
 
-    res.json({ success: true, data: result, parsed: parseResult.payload, tokensRemaining: req.tokensRemaining });
+    // Persist the analysis as a tracked application for signed-in users.
+    // Anonymous (free-trial) analyses are not saved. A save failure must
+    // never fail the analysis the user already paid for.
+    let applicationId = null;
+    if (req.auth?.uid) {
+      try {
+        const created = await createApplication(req.auth.uid, {
+          company: result?.meta?.company || "",
+          targetRole: result?.meta?.targetRole || "",
+          jobDescription,
+          matchScore: result?.meta?.matchScore,
+          scores: result?.meta?.scores || null,
+          analysis: result,
+          parsed: parseResult.payload,
+        });
+        applicationId = created.id;
+      } catch (saveErr) {
+        console.error("-> Save application error:", saveErr);
+      }
+    }
+
+    res.json({ success: true, data: result, parsed: parseResult.payload, applicationId, tokensRemaining: req.tokensRemaining });
 
   } catch (err) {
     const total = Date.now() - sw._start;

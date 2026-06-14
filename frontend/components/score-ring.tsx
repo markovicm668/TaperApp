@@ -4,12 +4,13 @@ import { cn } from '@/lib/utils';
 
 interface ScoreRingProps {
   score: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 export function ScoreRing({ score, size = 'md', className }: ScoreRingProps) {
   const sizes = {
+    xs: { outer: 42, stroke: 4 },
     sm: { outer: 64, stroke: 5 },
     md: { outer: 96, stroke: 7 },
     lg: { outer: 128, stroke: 9 },
@@ -56,6 +57,7 @@ export function ScoreRing({ score, size = 'md', className }: ScoreRingProps) {
         <span
           className={cn(
             'font-semibold tabular-nums text-foreground',
+            size === 'xs' && 'text-xs',
             size === 'sm' && 'text-sm',
             size === 'md' && 'text-xl',
             size === 'lg' && 'text-3xl'

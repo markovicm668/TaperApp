@@ -66,7 +66,6 @@ type ParsedInlineItemKey =
   | { type: 'header-slot'; slot: 'name' | 'title' | 'location' | 'phone' | 'email' | 'url' }
   | { type: 'header-profile'; profileToken: string }
   | { type: 'work-highlight'; entryToken: string; highlightToken: string }
-  | { type: 'project-description'; entryToken: string }
   | { type: 'project-highlight'; entryToken: string; highlightToken: string }
   | { type: 'skill'; skillToken: string }
   | { type: 'language'; languageToken: string }
@@ -301,14 +300,6 @@ function parseInlineItemKey(itemKey: string): ParsedInlineItemKey | null {
     };
   }
 
-  const projectDescriptionMatch = itemKey.match(/^item:projects:description:(.+)$/);
-  if (projectDescriptionMatch) {
-    return {
-      type: 'project-description',
-      entryToken: projectDescriptionMatch[1] || '',
-    };
-  }
-
   const projectHighlightMatch = itemKey.match(/^item:projects:highlight:([^:]+):(.+)$/);
   if (projectHighlightMatch) {
     return {
@@ -498,12 +489,6 @@ function applyItemEdit(resumeData: ResumeDataV2, itemKey: string, text: string):
           highlights: Array.isArray(nextHighlights) ? nextHighlights : [],
         };
       });
-
-    case 'project-description':
-      return patchProjectEntry(resumeData, parsed.entryToken, entry => ({
-        ...entry,
-        description: text,
-      }));
 
     case 'project-highlight':
       return patchProjectEntry(resumeData, parsed.entryToken, entry => {

@@ -10,7 +10,6 @@ export type PdfSelectionItemKind =
   | 'work-entry'
   | 'work-highlight'
   | 'project-entry'
-  | 'project-description'
   | 'project-highlight'
   | 'education-entry'
   | 'award-entry'
@@ -104,10 +103,6 @@ function workHighlightKey(
 
 function projectEntryKey(entry: ResumePdfPayload['projects'][number], index: number): string {
   return `item:projects:entry:${entry?.id || index}`;
-}
-
-function projectDescriptionKey(entry: ResumePdfPayload['projects'][number], index: number): string {
-  return `item:projects:description:${entry?.id || index}`;
 }
 
 function projectHighlightKey(
@@ -323,19 +318,6 @@ export function buildPdfSelectionModel(payload: ResumePdfPayload): PdfSelectionM
       label: buildEntryLabel([nonEmpty(entry?.name), nonEmpty(entry?.role)], `Project ${entryIndex + 1}`),
       childKeys: [],
     });
-
-    const description = nonEmpty(entry?.description);
-    if (description) {
-      addItem(model, {
-        key: projectDescriptionKey(entry, entryIndex),
-        sectionKey: canonicalSectionKey('projects'),
-        kind: 'project-description',
-        parentKey: entryKey,
-        label: description,
-        childKeys: [],
-        matchTexts: [description],
-      });
-    }
 
     (Array.isArray(entry?.highlights) ? entry.highlights : []).forEach((highlight, highlightIndex) => {
       const texts = buildHighlightMatchTexts(highlight);
@@ -689,9 +671,6 @@ export function filterResumePdfPayloadForSelection(
       const sourceEntry = payload.projects?.[entryIndex];
       const entryKey = projectEntryKey(sourceEntry, entryIndex);
       if (getPdfItemCheckState(model, normalizedOverrides, entryKey) === 'unchecked') return false;
-      if (!isPdfItemChecked(model, normalizedOverrides, projectDescriptionKey(sourceEntry, entryIndex))) {
-        entry.description = undefined;
-      }
       entry.highlights = (entry.highlights || []).filter((highlight, highlightIndex) =>
         isPdfItemChecked(
           model,
