@@ -5,14 +5,17 @@ import { Check, Clipboard, FileText, FileUp, Sparkles, Upload, X } from 'lucide-
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { sampleResume } from '@/lib/api';
+import { track } from '@/lib/analytics';
 import { AdminOnly } from '@/components/admin-only';
 
 type InputTab = 'text' | 'pdf';
 
+type ResumeChangePayload = { type: 'file' | 'text' | 'linkedin'; content: string; fileName?: string; file?: File } | null;
+
 const MAX_PDF_SIZE = 5 * 1024 * 1024;
 
 interface ResumeInputCardProps {
-  onResumeChange: (data: { type: 'file' | 'text' | 'linkedin'; content: string; fileName?: string; file?: File } | null) => void;
+  onResumeChange: (data: ResumeChangePayload) => void;
   hideSampleButton?: boolean;
 }
 
@@ -30,16 +33,40 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Fire resume_uploaded from the single funnel here so every consumer (the
+  // signed-in /analyze page and the guest landing page) emits it identically.
+  // Deduped by input type + file name so paste keystrokes don't re-fire.
+  const trackedResumeKeyRef = useRef<string | null>(null);
+  const reportResume = useCallback(
+    (data: ResumeChangePayload) => {
+      onResumeChange(data);
+      if (!data) {
+        trackedResumeKeyRef.current = null;
+        return;
+      }
+      const key = `${data.type}:${data.fileName ?? ''}`;
+      if (trackedResumeKeyRef.current === key) return;
+      trackedResumeKeyRef.current = key;
+      track('resume_uploaded', {
+        input_type: data.type,
+        has_file: Boolean(data.file),
+        file_name: data.fileName || null,
+        char_count: data.content.length,
+      });
+    },
+    [onResumeChange]
+  );
+
   const handlePastedTextChange = useCallback(
     (text: string) => {
       setPastedText(text);
       if (text.trim()) {
-        onResumeChange({ type: 'text', content: text });
+        reportResume({ type: 'text', content: text });
       } else {
-        onResumeChange(null);
+        reportResume(null);
       }
     },
-    [onResumeChange]
+    [reportResume]
   );
 
   const insertSampleResume = useCallback(() => {
@@ -61,9 +88,9 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
       }
 
       setSelectedFile(file);
-      onResumeChange({ type: 'file', content: '', fileName: file.name, file });
+      reportResume({ type: 'file', content: '', fileName: file.name, file });
     },
-    [onResumeChange]
+    [reportResume]
   );
 
   const handleFileSelect = useCallback(
@@ -88,8 +115,8 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
   const handleRemoveFile = useCallback(() => {
     setSelectedFile(null);
     setFileError(null);
-    onResumeChange(null);
-  }, [onResumeChange]);
+    reportResume(null);
+  }, [reportResume]);
 
   const switchTab = useCallback(
     (tab: InputTab) => {
@@ -98,20 +125,20 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
       if (tab === 'text') {
         setSelectedFile(null);
         if (pastedText.trim()) {
-          onResumeChange({ type: 'text', content: pastedText });
+          reportResume({ type: 'text', content: pastedText });
         } else {
-          onResumeChange(null);
+          reportResume(null);
         }
       } else {
         setPastedText('');
         if (selectedFile) {
-          onResumeChange({ type: 'file', content: '', fileName: selectedFile.name, file: selectedFile });
+          reportResume({ type: 'file', content: '', fileName: selectedFile.name, file: selectedFile });
         } else {
-          onResumeChange(null);
+          reportResume(null);
         }
       }
     },
-    [onResumeChange, pastedText, selectedFile]
+    [reportResume, pastedText, selectedFile]
   );
 
   const wordCount = pastedText.trim() ? pastedText.trim().split(/\s+/).length : 0;

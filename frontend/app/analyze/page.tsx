@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, RotateCcw, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,7 +15,6 @@ import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAdmin } from '@/lib/auth/useAdmin';
 import { useTokens } from '@/lib/tokens/TokenContext';
-import { track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 interface StatusPillProps {
@@ -71,33 +70,8 @@ export default function AnalyzePage() {
   const canParseOnly = Boolean(resumeData);
   const isBusy = isAnalyzing || isParsingOnly;
 
-  const trackedResumeIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!resumeData) {
-      trackedResumeIdRef.current = null;
-      return;
-    }
-    const id = `${resumeData.type}:${resumeData.fileName || ''}:${resumeData.content.length}`;
-    if (trackedResumeIdRef.current === id) return;
-    trackedResumeIdRef.current = id;
-    track('resume_uploaded', {
-      input_type: resumeData.type,
-      has_file: Boolean(resumeData.file),
-      file_name: resumeData.fileName || null,
-      char_count: resumeData.content.length,
-    });
-  }, [resumeData]);
-
-  const jdTrackedRef = useRef(false);
-  useEffect(() => {
-    const len = jobDescription.trim().length;
-    if (len > 50 && !jdTrackedRef.current) {
-      jdTrackedRef.current = true;
-      track('job_description_added', { char_count: len });
-    } else if (len === 0 && jdTrackedRef.current) {
-      jdTrackedRef.current = false;
-    }
-  }, [jobDescription]);
+  // resume_uploaded / job_description_added are emitted from the shared
+  // ResumeInputCard / JobDescriptionCard components.
 
   const handleAnalyzeClick = useCallback(() => {
     if (!resumeData || !jobDescription) return;

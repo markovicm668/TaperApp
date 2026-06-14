@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, Wand2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,35 +25,8 @@ export function TryItFreeSection() {
     setUsedFree(hasUsedFreeAnalysis());
   }, [user]);
 
-  // Mirror the signed-in /analyze tracking here so guests (who run the flow on
-  // the landing page) also emit resume_uploaded / job_description_added.
-  const trackedResumeIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!resumeData) {
-      trackedResumeIdRef.current = null;
-      return;
-    }
-    const id = `${resumeData.type}:${resumeData.fileName || ''}:${resumeData.content.length}`;
-    if (trackedResumeIdRef.current === id) return;
-    trackedResumeIdRef.current = id;
-    track('resume_uploaded', {
-      input_type: resumeData.type,
-      has_file: Boolean(resumeData.file),
-      file_name: resumeData.fileName || null,
-      char_count: resumeData.content.length,
-    });
-  }, [resumeData]);
-
-  const jdTrackedRef = useRef(false);
-  useEffect(() => {
-    const len = jobDescription.trim().length;
-    if (len > 50 && !jdTrackedRef.current) {
-      jdTrackedRef.current = true;
-      track('job_description_added', { char_count: len });
-    } else if (len === 0 && jdTrackedRef.current) {
-      jdTrackedRef.current = false;
-    }
-  }, [jobDescription]);
+  // resume_uploaded / job_description_added are emitted from the shared
+  // ResumeInputCard / JobDescriptionCard components, so they fire here too.
 
   const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow({
     source: 'landing',

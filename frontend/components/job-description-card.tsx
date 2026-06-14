@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Briefcase, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { sampleJobDescription } from '@/lib/api';
+import { track } from '@/lib/analytics';
 import { AdminOnly } from '@/components/admin-only';
 
 interface JobDescriptionCardProps {
@@ -15,10 +16,20 @@ interface JobDescriptionCardProps {
 export function JobDescriptionCard({ onJobDescriptionChange, hideSampleButton = false }: JobDescriptionCardProps) {
   const [jobDescription, setJobDescription] = useState('');
 
+  // Fire job_description_added once the JD is substantive, from this single
+  // funnel so both the /analyze page and the guest landing page emit it.
+  const jdTrackedRef = useRef(false);
   const handleChange = useCallback(
     (text: string) => {
       setJobDescription(text);
       onJobDescriptionChange(text);
+      const len = text.trim().length;
+      if (len > 50 && !jdTrackedRef.current) {
+        jdTrackedRef.current = true;
+        track('job_description_added', { char_count: len });
+      } else if (len === 0 && jdTrackedRef.current) {
+        jdTrackedRef.current = false;
+      }
     },
     [onJobDescriptionChange]
   );
