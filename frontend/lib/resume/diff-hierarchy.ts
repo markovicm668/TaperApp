@@ -68,7 +68,7 @@ export type DiffHierarchyBlock =
     };
 
 const DATE_RANGE_TOKEN =
-  '(?:present|current|now|\\d{4}|\\d{1,2}[/-]\\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s*\\d{2,4})';
+  '(?:present|current|now|\\d{4}[/-]\\d{1,2}(?:[/-]\\d{1,2})?|\\d{4}|\\d{1,2}[/-]\\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s*\\d{2,4})';
 
 const DATE_RANGE_RE = new RegExp(
   `^\\s*${DATE_RANGE_TOKEN}(?:\\s*(?:-|–|—|to)\\s*${DATE_RANGE_TOKEN})?\\s*$`,
@@ -169,7 +169,10 @@ function isEntryMetaRow(
     return true;
   }
 
+  if (/^dates?\s*:/i.test(normalized)) return true;
   if (/^(gpa|cgpa)\s*:/i.test(normalized)) return true;
+  if (/^study\s*type\s*:/i.test(normalized)) return true;
+  if (/^location\s*:/i.test(normalized)) return true;
   if (/^(issuer|issued by)\s*:/i.test(normalized)) return true;
   if (/^(url|website|repository|repo)\s*:/i.test(normalized)) return true;
 

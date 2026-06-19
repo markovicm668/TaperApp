@@ -17,7 +17,7 @@ type InlineEntrySection = 'work' | 'projects' | 'education' | 'awards';
 
 type WorkEntrySlot = 'heading' | 'date' | 'location';
 type ProjectEntrySlot = 'heading' | 'date' | 'technologies';
-type EducationEntrySlot = 'institution' | 'degreeArea' | 'date' | 'location' | 'gpa' | 'honor';
+type EducationEntrySlot = 'institution' | 'degreeArea' | 'studyType' | 'date' | 'location' | 'gpa' | 'honor';
 type AwardEntrySlot = 'heading' | 'date' | 'summary';
 
 export type ResumeInlineEditTarget =
@@ -114,7 +114,10 @@ function parseHeadingPair(text: string): { primary?: string; secondary?: string 
 }
 
 function parseDateRange(text: string): { startDate?: string; endDate?: string; isCurrent?: boolean } {
-  const parts = splitOnFirst(text, /^(.*?)(?:\s(?:-|–|—|to)\s)(.+)$/iu);
+  // Tolerate an optional "Dates:" prefix — entry date rows are labeled in the editor so the edit
+  // affordance is recognized by the label rather than by whether the value looks like a date.
+  const withoutLabel = String(text || '').replace(/^dates?\s*:\s*/i, '');
+  const parts = splitOnFirst(withoutLabel, /^(.*?)(?:\s(?:-|–|—|to)\s)(.+)$/iu);
   const startDate = nonEmpty(parts.left);
   const endRaw = nonEmpty(parts.right);
   if (!endRaw) {
@@ -139,7 +142,9 @@ function parseDateRange(text: string): { startDate?: string; endDate?: string; i
 }
 
 function parseLocationLine(text: string): ResumeLocationV2 | undefined {
-  const normalized = nonEmpty(text);
+  // Tolerate an optional "Location:" prefix — entry location rows are labeled in the editor so that
+  // single-token values (e.g. a lone country) are still recognized as locations.
+  const normalized = nonEmpty(String(text || '').replace(/^location\s*:\s*/i, ''));
   if (!normalized) return undefined;
   const parts = normalized
     .split(',')
@@ -191,6 +196,11 @@ function parseDegreeAreaLine(text: string): { degree?: string; area?: string } {
 
 function parseGpaLine(text: string): string | undefined {
   const normalized = String(text || '').replace(/^gpa\s*:\s*/i, '');
+  return nonEmpty(normalized);
+}
+
+function parseStudyTypeLine(text: string): string | undefined {
+  const normalized = String(text || '').replace(/^study\s*type\s*:\s*/i, '');
   return nonEmpty(normalized);
 }
 
@@ -623,6 +633,11 @@ function applyEntrySlotEdit(resumeData: ResumeDataV2, target: Extract<ResumeInli
               area: parts.area,
             };
           }
+          case 'studyType':
+            return {
+              ...entry,
+              studyType: parseStudyTypeLine(text),
+            };
           case 'date': {
             const range = parseDateRange(text);
             return {
@@ -762,6 +777,7 @@ export const __private__ = {
   parseLocationLine,
   parseDegreeAreaLine,
   parseGpaLine,
+  parseStudyTypeLine,
   parseTechnologyNames,
   parseLanguageLine,
   parseHeaderProfileLine,

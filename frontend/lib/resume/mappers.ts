@@ -328,13 +328,16 @@ function buildEducationLines(education: ResumeEducationItemV2[] | undefined): st
     const institution = nonEmpty(entry.institution);
     if (institution) entryLines.push(institution);
 
-    const degree = nonEmpty(entry.degree) || nonEmpty(entry.studyType);
+    const degree = nonEmpty(entry.degree);
     const area = nonEmpty(entry.area);
     const degreeLine =
       degree && area
         ? `${degree}, ${area}`
         : degree || area;
     if (degreeLine) entryLines.push(degreeLine);
+
+    const studyType = nonEmpty(entry.studyType);
+    if (studyType) entryLines.push(`Study Type: ${studyType}`);
 
     const dateRange = formatDateRange(entry.startDate, entry.endDate, false);
     if (dateRange) entryLines.push(dateRange);

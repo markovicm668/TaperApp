@@ -1,7 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Edit3 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit3, Plus } from 'lucide-react';
+import type { ResumeDataV2 } from '@resume-scanner/resume-contract';
 import type { BulletChange } from '@/lib/types';
 import type { SectionViewModelRow } from '@/lib/resume/mappers';
 import {
@@ -28,7 +29,7 @@ import {
   resumeInlineEditTargetKey,
   type ResumeInlineEditTarget,
 } from '@/lib/resume/inline-edits';
-import { useTargetRole } from '@/lib/resume/selectors';
+import { useResumeData, useTargetRole } from '@/lib/resume/selectors';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,6 +108,85 @@ type HeaderDisplayItem = {
   kind: HeaderItemKind;
   sourceIndex: number;
 };
+
+// The PDF selection model only carries each entry's heading + highlight bullets, so dates,
+// locations, and study type are otherwise dropped from the editor. We re-derive those meta lines
+// from the structured resume data and inject them as rows so they render and stay editable via the
+// existing entry-slot mechanism. Locations are labeled ("Location: …") so single-token values
+// (e.g. just a country) are still recognized as location rows rather than stray bullets.
+type StructuredEntryView = {
+  id?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  studyType?: string;
+  location?: {
+    city?: string;
+    region?: string;
+    country?: string;
+    address?: string;
+    postalCode?: string;
+    countryCode?: string;
+  };
+};
+
+function findStructuredEntry(
+  resumeData: ResumeDataV2,
+  kind: 'work' | 'projects' | 'education',
+  token: string
+): StructuredEntryView | undefined {
+  const list = kind === 'work' ? resumeData.work : kind === 'projects' ? resumeData.projects : resumeData.education;
+  const entries = (Array.isArray(list) ? list : []) as StructuredEntryView[];
+  const byId = entries.find(entry => String(entry?.id || '') === token);
+  if (byId) return byId;
+  const numericIndex = Number(token);
+  return Number.isInteger(numericIndex) && numericIndex >= 0 && numericIndex < entries.length
+    ? entries[numericIndex]
+    : undefined;
+}
+
+function nonEmptyText(value?: string): string {
+  return value ? value.trim() : '';
+}
+
+function formatEntryDateLine(start?: string, end?: string, isCurrent?: boolean): string | undefined {
+  const normalizedStart = nonEmptyText(start);
+  const normalizedEnd = nonEmptyText(end) || (isCurrent ? 'Present' : '');
+  if (normalizedStart && normalizedEnd) return `${normalizedStart} - ${normalizedEnd}`;
+  return normalizedStart || normalizedEnd || undefined;
+}
+
+function formatEntryLocationText(location: StructuredEntryView['location']): string | undefined {
+  if (!location) return undefined;
+  const primary = [location.city, location.region, location.country].map(nonEmptyText).filter(Boolean);
+  if (primary.length) return primary.join(', ');
+  const secondary = [location.address, location.postalCode, location.countryCode].map(nonEmptyText).filter(Boolean);
+  return secondary.length ? secondary.join(', ') : undefined;
+}
+
+function buildEntryMetaLines(resumeData: ResumeDataV2, itemKind: string, entryToken: string): string[] {
+  const lines: string[] = [];
+  if (itemKind === 'work-entry') {
+    const entry = findStructuredEntry(resumeData, 'work', entryToken);
+    const date = formatEntryDateLine(entry?.startDate, entry?.endDate, entry?.isCurrent);
+    if (date) lines.push(`Dates: ${date}`);
+    const location = formatEntryLocationText(entry?.location);
+    if (location) lines.push(`Location: ${location}`);
+  } else if (itemKind === 'project-entry') {
+    const entry = findStructuredEntry(resumeData, 'projects', entryToken);
+    const date = formatEntryDateLine(entry?.startDate, entry?.endDate, false);
+    if (date) lines.push(`Dates: ${date}`);
+  } else if (itemKind === 'education-entry') {
+    const entry = findStructuredEntry(resumeData, 'education', entryToken);
+    const studyType = nonEmptyText(entry?.studyType);
+    if (studyType) lines.push(`Study Type: ${studyType}`);
+    const date = formatEntryDateLine(entry?.startDate, entry?.endDate, false);
+    if (date) lines.push(`Dates: ${date}`);
+    const location = formatEntryLocationText(entry?.location);
+    if (location) lines.push(`Location: ${location}`);
+  }
+  return lines;
+}
 
 function TriStateCheckbox({
   state,
@@ -542,6 +622,7 @@ export function DiffView({
   onPdfToggleItem,
 }: DiffViewProps) {
   const targetRole = useTargetRole();
+  const resumeData = useResumeData();
   const normalizedTargetRole = useMemo(
     () => normalizeLineForMatch(targetRole || ''),
     [targetRole],
@@ -610,6 +691,12 @@ export function DiffView({
               updatedLines.push('');
             }
             updatedLines.push(item.label);
+            const entryRef = parseResumeInlineEntryItemKey(itemKey);
+            if (entryRef) {
+              buildEntryMetaLines(resumeData, item.kind, entryRef.entryToken).forEach(line =>
+                updatedLines.push(line)
+              );
+            }
             item.childKeys.forEach(childKey => {
               const child = pdfSelectionModel.items[childKey];
               if (child?.label) updatedLines.push(child.label);
@@ -671,7 +758,7 @@ export function DiffView({
     }
 
     return [...mappedSections, ...unmappedSections];
-  }, [localChanges, pdfSelectionModel, normalizedTargetRole]);
+  }, [localChanges, pdfSelectionModel, normalizedTargetRole, resumeData]);
 
   useEffect(() => {
     if (sectionModels.length === 0) {
@@ -798,7 +885,7 @@ export function DiffView({
   const buildEntrySlotTarget = (
     entryItemKey: string | undefined,
     section: 'work' | 'projects' | 'education' | 'awards',
-    slot: 'heading' | 'date' | 'location' | 'technologies' | 'institution' | 'degreeArea' | 'gpa' | 'summary' | 'honor',
+    slot: 'heading' | 'date' | 'location' | 'technologies' | 'institution' | 'degreeArea' | 'studyType' | 'gpa' | 'summary' | 'honor',
     index?: number
   ): ResumeInlineEditTarget | undefined => {
     if (!onInlineEdit || !entryItemKey) return undefined;
@@ -817,7 +904,14 @@ export function DiffView({
     }
 
     if (section === 'education') {
-      if (slot === 'institution' || slot === 'degreeArea' || slot === 'date' || slot === 'location' || slot === 'gpa') {
+      if (
+        slot === 'institution' ||
+        slot === 'degreeArea' ||
+        slot === 'studyType' ||
+        slot === 'date' ||
+        slot === 'location' ||
+        slot === 'gpa'
+      ) {
         return {
           kind: 'entry-slot',
           section,
@@ -872,7 +966,9 @@ export function DiffView({
     const text = row.text || '';
     const kind = entryKind;
 
-    if (isDateRangeLike(text)) {
+    // Detect by the "Dates:" label (not by whether the value looks date-like) so the edit button
+    // persists even after the user types a free-form value.
+    if (/^dates?\s*:/i.test(text) || isDateRangeLike(text)) {
       if (kind === 'work' || kind === 'projects' || kind === 'education' || kind === 'awards') {
         return buildEntrySlotTarget(entryItemKey, kind, 'date');
       }
@@ -881,6 +977,16 @@ export function DiffView({
 
     if (/^(gpa|cgpa)\s*:/i.test(text)) {
       return kind === 'education' ? buildEntrySlotTarget(entryItemKey, 'education', 'gpa') : undefined;
+    }
+
+    if (/^study\s*type\s*:/i.test(text)) {
+      return kind === 'education' ? buildEntrySlotTarget(entryItemKey, 'education', 'studyType') : undefined;
+    }
+
+    if (/^location\s*:/i.test(text)) {
+      if (kind === 'work') return buildEntrySlotTarget(entryItemKey, 'work', 'location');
+      if (kind === 'education') return buildEntrySlotTarget(entryItemKey, 'education', 'location');
+      return undefined;
     }
 
     if (isTechnologiesLine(text)) {
@@ -897,6 +1003,28 @@ export function DiffView({
     return undefined;
   };
 
+  // Presence of date / location / studyType is read from the structured resume data (the source of
+  // truth) rather than re-detecting from rendered text, so the "+ Add" affordances never appear for
+  // a field that already has a value but whose text didn't match a display heuristic (e.g. ISO
+  // "2026-02" dates or a single-token "Serbia" location).
+  const getEntrySlotPresence = (
+    kind: 'work' | 'projects' | 'education',
+    entryItemKey: string | undefined
+  ): { found: boolean; hasDate: boolean; hasLocation: boolean; hasStudyType: boolean } => {
+    const absent = { found: false, hasDate: false, hasLocation: false, hasStudyType: false };
+    if (!entryItemKey) return absent;
+    const ref = parseResumeInlineEntryItemKey(entryItemKey);
+    if (!ref || ref.section !== kind) return absent;
+
+    const entry = findStructuredEntry(resumeData, kind, ref.entryToken);
+    if (!entry) return absent;
+
+    const filled = (text?: string) => Boolean(text && text.trim());
+    const hasDate = filled(entry.startDate) || filled(entry.endDate) || Boolean(entry.isCurrent);
+    const hasLocation = Boolean(formatEntryLocationText(entry.location));
+    return { found: true, hasDate, hasLocation, hasStudyType: filled(entry.studyType) };
+  };
+
   const renderInlineEditButton = (target: ResumeInlineEditTarget, currentText: string) => (
     <Button
       type="button"
@@ -908,6 +1036,46 @@ export function DiffView({
       <Edit3 className="h-4 w-4" />
     </Button>
   );
+
+  // Renders a subtle "+ Add <label>" affordance for an entry slot that has no value yet (so no
+  // meta row exists to attach an edit button to). When that slot's editor is active it swaps to
+  // the same textarea + Save/Cancel block used elsewhere, with an empty starting draft.
+  const renderAddSlotAffordance = (target: ResumeInlineEditTarget | undefined, label: string) => {
+    if (!target || !onInlineEdit) return null;
+    const targetKey = resumeInlineEditTargetKey(target);
+
+    if (isEditingInlineTarget(target)) {
+      return (
+        <div key={`${targetKey}-add`} className="w-full space-y-2">
+          <Textarea
+            value={draftText}
+            onChange={event => setDraftText(event.target.value)}
+            className="min-h-[96px] bg-background font-mono text-sm"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveEditing}>
+              Save
+            </Button>
+            <Button variant="ghost" size="sm" onClick={cancelEditing}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        key={`${targetKey}-add`}
+        type="button"
+        onClick={() => startInlineEditing(target, '')}
+        className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground/70 transition hover:text-foreground"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add {label}
+      </button>
+    );
+  };
 
   const renderSelectableWrapper = (
     key: string,
@@ -1681,6 +1849,46 @@ export function DiffView({
               ) : block.meta.length > 0 ? (
                 renderMetaLine(block.meta)
               ) : null}
+              {onInlineEdit &&
+                entryItemKey &&
+                (() => {
+                  const kind = block.entryKind;
+                  if (kind !== 'work' && kind !== 'projects' && kind !== 'education') return null;
+
+                  const presence = getEntrySlotPresence(kind, entryItemKey);
+                  const hasDate = presence.found
+                    ? presence.hasDate
+                    : block.metaRows.some(metaRow => isDateRangeLike(metaRow.text));
+                  const hasLocation = presence.found
+                    ? presence.hasLocation
+                    : block.metaRows.some(metaRow => isLocationLike(metaRow.text));
+                  const hasStudyType = presence.found
+                    ? presence.hasStudyType
+                    : block.metaRows.some(metaRow => /^study\s*type\s*:/i.test(metaRow.text));
+
+                  const affordances: ReactNode[] = [];
+                  if (!hasDate) {
+                    affordances.push(
+                      renderAddSlotAffordance(buildEntrySlotTarget(entryItemKey, kind, 'date'), 'dates')
+                    );
+                  }
+                  if (!hasLocation && (kind === 'work' || kind === 'education')) {
+                    affordances.push(
+                      renderAddSlotAffordance(buildEntrySlotTarget(entryItemKey, kind, 'location'), 'location')
+                    );
+                  }
+                  if (!hasStudyType && kind === 'education') {
+                    affordances.push(
+                      renderAddSlotAffordance(buildEntrySlotTarget(entryItemKey, kind, 'studyType'), 'study type')
+                    );
+                  }
+
+                  const visible = affordances.filter(Boolean);
+                  if (!visible.length) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-0.5">{visible}</div>
+                  );
+                })()}
             </div>
           </div>
           {block.rows.length > 0 && (

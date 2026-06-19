@@ -45,9 +45,10 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.use("/user/me", requireAuth, userRoute);
+// Only the analysis itself costs a credit; parsing is a free prerequisite step.
 app.use("/analyze", optionalAuth, optionalTokens(1), analyzeRoute);
-app.use("/parse", optionalAuth, optionalTokens(1), parseRoute);
-app.use("/parse-pdf", optionalAuth, optionalTokens(1), parsePdfRoute);
+app.use("/parse", optionalAuth, parseRoute);
+app.use("/parse-pdf", optionalAuth, parsePdfRoute);
 // /export/preview is anonymous-friendly; /export/pdf has its own requireAuth
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);

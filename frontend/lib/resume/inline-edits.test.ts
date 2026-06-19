@@ -103,6 +103,35 @@ test('private parsers handle composite line formats', () => {
     endDate: undefined,
     isCurrent: true,
   });
+  assert.deepEqual(__private__.parseDateRange('2026-02 - Present'), {
+    startDate: '2026-02',
+    endDate: undefined,
+    isCurrent: true,
+  });
+  assert.deepEqual(__private__.parseDateRange('2023-09 - 2026-02'), {
+    startDate: '2023-09',
+    endDate: '2026-02',
+    isCurrent: false,
+  });
+  // Labeled rows with a free-form value still parse (and stay editable).
+  assert.deepEqual(__private__.parseDateRange('Dates: 2026-02 - KITA'), {
+    startDate: '2026-02',
+    endDate: 'KITA',
+    isCurrent: false,
+  });
+  assert.deepEqual(__private__.parseDateRange('Dates: 2020 - Present'), {
+    startDate: '2020',
+    endDate: undefined,
+    isCurrent: true,
+  });
+  assert.deepEqual(__private__.parseLocationLine('Location: Serbia'), {
+    city: 'Serbia',
+    region: undefined,
+    country: undefined,
+    address: undefined,
+    postalCode: undefined,
+    countryCode: undefined,
+  });
   assert.deepEqual(__private__.parseLocationLine('Belgrade, Central Serbia, Serbia'), {
     city: 'Belgrade',
     region: 'Central Serbia',
@@ -162,6 +191,52 @@ test('applyInlineEditToResumeData updates canonical fields across sections', () 
   assert.equal(resume.skills[0]?.category, 'Engineering');
   assert.equal(resume.skills[1]?.category, 'Engineering');
   assert.equal(resume.skills[2]?.category, 'Soft Skills');
+});
+
+test('applyInlineEditToResumeData adds dates/location and edits study type', () => {
+  let resume = makeResumeData();
+  // Strip the work entry's dates and location so this exercises adding them from empty.
+  resume.work[0] = {
+    ...resume.work[0]!,
+    startDate: undefined,
+    endDate: undefined,
+    isCurrent: undefined,
+    location: undefined,
+  };
+
+  resume = applyInlineEditToResumeData(resume, {
+    kind: 'entry-slot',
+    section: 'work',
+    entryItemKey: 'item:work:entry:work-1',
+    slot: 'date',
+  }, 'Jan 2020 - Apr 2023');
+  assert.equal(resume.work[0]?.startDate, 'Jan 2020');
+  assert.equal(resume.work[0]?.endDate, 'Apr 2023');
+  assert.equal(resume.work[0]?.isCurrent, false);
+
+  resume = applyInlineEditToResumeData(resume, {
+    kind: 'entry-slot',
+    section: 'work',
+    entryItemKey: 'item:work:entry:work-1',
+    slot: 'location',
+  }, 'Berlin, Germany');
+  assert.deepEqual(
+    { city: resume.work[0]?.location?.city, country: resume.work[0]?.location?.country },
+    { city: 'Berlin', country: 'Germany' }
+  );
+
+  resume = applyInlineEditToResumeData(resume, {
+    kind: 'entry-slot',
+    section: 'education',
+    entryItemKey: 'item:education:entry:edu-1',
+    slot: 'studyType',
+  }, 'Study Type: Bachelor of Science');
+  assert.equal(resume.education[0]?.studyType, 'Bachelor of Science');
+  // Editing study type must not disturb the existing degree.
+  assert.equal(resume.education[0]?.degree, 'BSc');
+
+  assert.equal(__private__.parseStudyTypeLine('Study Type: Bachelor of Science'), 'Bachelor of Science');
+  assert.equal(__private__.parseStudyTypeLine('   '), undefined);
 });
 
 test('applyInlineEditToParsedMeta patches custom section lines only and blank edits are ignored', () => {

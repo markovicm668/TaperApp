@@ -78,7 +78,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
 
       try {
         // Step 1: Parse resume separately so the progress dialog
-        // reflects real parse time (costs 1 token for authed users).
+        // reflects real parse time (free; only the analysis step is billed).
         const parseResult = resumeData.file
           ? await parseResumePdf(resumeData.file)
           : await parseResume({
@@ -89,7 +89,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         setParsedPayload(parseResult);
         setParseDone(true);
 
-        // Step 2: Run full analysis (costs 3 tokens for authed users).
+        // Step 2: Run full analysis (costs 1 token for authed users).
         // Pass the already-parsed resumeData so the backend skips re-parsing.
         const { tokensRemaining: _parseTokens, ...parsedPayloadForSave } = parseResult;
         const { result, analysis, parsed, applicationId, tokensRemaining } = await analyzeResume(
