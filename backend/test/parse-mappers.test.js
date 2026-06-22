@@ -128,3 +128,92 @@ test('buildParsedPayload preserves direct canonical skill objects', () => {
     ['JavaScript', 'TypeScript']
   );
 });
+
+test('buildParsedPayload drops custom-section lines already mapped into canonical sections', () => {
+  const sharedBullet = 'Collaborate with cross-functional teams to ship features on schedule';
+  const payload = buildParsedPayload({
+    resumeCandidate: {
+      work: [
+        {
+          position: 'Engineer',
+          company: 'Acme',
+          highlights: [sharedBullet, 'Mentored two junior engineers'],
+        },
+      ],
+    },
+    sectionBlocks: [
+      {
+        id: 'section-work',
+        title: 'Experience',
+        kind: 'work',
+        canonicalTarget: 'work',
+        lines: ['Acme — Engineer'],
+      },
+      {
+        id: 'unstructured_bullets',
+        title: 'Unstructured Bullets',
+        kind: 'custom',
+        canonicalTarget: 'none',
+        // Same bullets the model already placed into work[] (one carries a list prefix).
+        lines: [sharedBullet, '- Mentored two junior engineers'],
+      },
+    ],
+    resumeText: 'Example raw text',
+    inputType: 'text',
+    parserName: 'test-parser',
+  });
+
+  // Canonical work highlights remain intact.
+  assert.deepEqual(
+    payload.resumeData.work[0].highlights.map((item) => item.text),
+    [sharedBullet, 'Mentored two junior engineers']
+  );
+
+  // The duplicate catch-all section is gone from BOTH arrays.
+  assert.ok(
+    !(payload.sections || []).some((section) => section.id === 'unstructured_bullets'),
+    'unstructured_bullets should be removed from sections'
+  );
+  assert.ok(
+    !(payload.customSections || []).some((section) => section.id === 'unstructured_bullets'),
+    'unstructured_bullets should be removed from customSections'
+  );
+});
+
+test('buildParsedPayload keeps genuine custom sections that do not duplicate canonical content', () => {
+  const payload = buildParsedPayload({
+    resumeCandidate: {
+      work: [
+        {
+          position: 'Engineer',
+          highlights: ['Built backend APIs'],
+        },
+      ],
+    },
+    sectionBlocks: [
+      {
+        id: 'section-work',
+        title: 'Experience',
+        kind: 'work',
+        canonicalTarget: 'work',
+        lines: ['Built backend APIs'],
+      },
+      {
+        id: 'section-volunteering',
+        title: 'Volunteering',
+        kind: 'custom',
+        canonicalTarget: 'none',
+        lines: ['Organized local coding workshops for students'],
+      },
+    ],
+    resumeText: 'Example raw text',
+    inputType: 'text',
+    parserName: 'test-parser',
+  });
+
+  const custom = (payload.customSections || []).find(
+    (section) => section.id === 'section-volunteering'
+  );
+  assert.ok(custom, 'volunteering section should be retained');
+  assert.deepEqual(custom.lines, ['Organized local coding workshops for students']);
+});

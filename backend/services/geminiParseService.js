@@ -88,7 +88,7 @@ Task:
   - skills as array of objects ({ id, name, category })
   - languages[] (language, fluency)
 - Include sectionOrder if confidently determined; otherwise leave empty.
-- Include customSections only for non-canonical sections.
+- customSections are ONLY for content under a genuine non-canonical heading (e.g. Volunteering, Certifications, Publications, Interests). Do NOT create a custom / "Unstructured" / "Other" section for bullets you have mapped into canonical sections. If a block of bullets is detached from its heading in the source text (common with PDF extraction), map each bullet to the correct canonical entry by context and do NOT also emit it as a customSection. Never output the same line in both a canonical section and a customSection.
 - Preserve original bullet meaning and ordering.
 - Never invent achievements, employers, dates, or credentials.
 - Unknown fields must be omitted or empty.

@@ -693,6 +693,72 @@ function deriveCustomSections(sections) {
   );
 }
 
+function normalizeLineForDedup(value) {
+  const stripped = normalizeListItem(value);
+  if (!stripped) return '';
+  return stripped.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Build a set of normalized bullet/line texts already mapped into canonical
+// resume data, so we can detect custom-section lines that merely duplicate them.
+function buildCanonicalLineSet(resume) {
+  const set = new Set();
+  const add = (value) => {
+    const normalized = normalizeLineForDedup(value);
+    if (normalized) set.add(normalized);
+  };
+  const addHighlights = (entries) => {
+    ensureArray(entries).forEach((entry) => {
+      ensureArray(entry && entry.highlights).forEach((highlight) => {
+        if (!highlight || typeof highlight !== 'object') return;
+        add(highlight.text);
+        add(highlight.originalText);
+      });
+    });
+  };
+
+  if (resume && typeof resume === 'object') {
+    addHighlights(resume.work);
+    addHighlights(resume.projects);
+    add(resume.summary);
+    ensureArray(resume.awards).forEach((award) => {
+      if (award && typeof award === 'object') add(award.summary);
+    });
+  }
+
+  return set;
+}
+
+// Drop, from custom sections only, any line whose content already exists in the
+// mapped canonical resume data (e.g. orphaned PDF bullets that were correctly
+// placed into work/projects but also emitted as an "Unstructured Bullets"
+// catch-all). A custom section left with no lines is removed entirely. Canonical
+// sections and genuinely non-canonical content are untouched.
+function pruneDuplicatedCustomLines(sections, canonicalSet) {
+  if (!canonicalSet || canonicalSet.size === 0) return sections;
+
+  const result = [];
+  sections.forEach((section) => {
+    const isCustom = section.canonicalTarget === 'none' && section.kind !== 'header';
+    if (!isCustom) {
+      result.push(section);
+      return;
+    }
+
+    const lines = ensureArray(section.lines);
+    const keptLines = lines.filter(
+      (line) => !canonicalSet.has(normalizeLineForDedup(line))
+    );
+
+    if (keptLines.length === 0) return;
+    result.push(
+      keptLines.length === lines.length ? section : { ...section, lines: keptLines }
+    );
+  });
+
+  return result;
+}
+
 function buildParsedPayload({
   resumeCandidate,
   sectionBlocks,
@@ -706,8 +772,12 @@ function buildParsedPayload({
   const normalizedSections = normalizeSectionBlocks(
     sectionBlocks || (resumeCandidate && resumeCandidate.sections)
   );
-  const sectionPresence = deriveSectionPresence(normalizedSections, normalizedResume);
-  const customSections = deriveCustomSections(normalizedSections);
+  const cleanedSections = pruneDuplicatedCustomLines(
+    normalizedSections,
+    buildCanonicalLineSet(normalizedResume)
+  );
+  const sectionPresence = deriveSectionPresence(cleanedSections, normalizedResume);
+  const customSections = deriveCustomSections(cleanedSections);
   const now = new Date().toISOString();
   const safeInputType = ALLOWED_INPUT_TYPES.has(inputType) ? inputType : 'text';
 
@@ -741,9 +811,9 @@ function buildParsedPayload({
     resumeData,
     source,
     notes: normalizeStringArray(notes),
-    ...(normalizedSections.length ? { sections: normalizedSections } : {}),
-    ...(normalizedSections.length ? { sectionPresence } : {}),
-    ...(normalizedSections.length ? { customSections } : {}),
+    ...(cleanedSections.length ? { sections: cleanedSections } : {}),
+    ...(cleanedSections.length ? { sectionPresence } : {}),
+    ...(cleanedSections.length ? { customSections } : {}),
   };
 }
 

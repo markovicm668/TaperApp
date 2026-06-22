@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, History, Settings, Share2, Sparkles, UserPlus, Zap } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, LayoutGrid, Settings, Share2, Sparkles, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
@@ -41,7 +41,7 @@ interface AppSidebarProps {
 const navItems = [
   { href: '/analyze', label: 'Analyze', icon: FileSearch },
   { href: '/results', label: 'Results', icon: BarChart3, requiresResults: true },
-  // { href: '/history', label: 'History', icon: History },
+  { href: '/history', label: 'Tracker', icon: LayoutGrid },
   // { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/help', label: 'Help', icon: HelpCircle },
 ];
