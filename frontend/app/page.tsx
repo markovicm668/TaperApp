@@ -169,7 +169,7 @@ function HeroA() {
             maxWidth: 560,
           }}
         >
-          Tailor reads your resume the way recruting software does, finds the keywords you&apos;re
+          Tailor reads your resume, finds the keywords you&apos;re
           missing, and rewrites it in your voice, helping you pass every ATS scan.
         </p>
       </div>

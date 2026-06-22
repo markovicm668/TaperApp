@@ -93,11 +93,11 @@ export function ApplicationDetailDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-border/70 pt-4">
+        <div className="flex flex-col gap-2 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button
             variant="outline"
             size="sm"
-            className="border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="order-last w-full border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive sm:order-first sm:w-auto"
             onClick={() => onDelete(application.id)}
             disabled={deleting}
           >
@@ -108,11 +108,21 @@ export function ApplicationDetailDialog({
             )}
             Delete
           </Button>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="order-2 w-full sm:order-1 sm:w-auto"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={() => onView(application.id)} disabled={opening}>
+            <Button
+              size="sm"
+              className="order-1 w-full sm:order-2 sm:w-auto"
+              onClick={() => onView(application.id)}
+              disabled={opening}
+            >
               {opening ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
