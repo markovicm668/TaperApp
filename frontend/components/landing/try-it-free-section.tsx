@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles, Wand2, Zap } from 'lucide-react';
+import { ArrowRight, Sparkles, Wand2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
@@ -69,7 +69,7 @@ export function TryItFreeSection() {
               marginBottom: 14,
             }}
           >
-            Try it free
+            Try it free — no account needed
           </div>
           {/* <h2
             className="font-serif"
@@ -103,31 +103,34 @@ export function TryItFreeSection() {
           <UsedPanel />
         ) : (
           <>
-            <div className="grid gap-5 xl:grid-cols-2">
-              <ResumeInputCard onResumeChange={setResumeData} hideSampleButton />
-              <JobDescriptionCard onJobDescriptionChange={setJobDescription} hideSampleButton />
+            <div className="mx-auto grid max-w-[1040px] grid-cols-1 items-stretch gap-4 min-[860px]:grid-cols-[1fr_auto_1fr] min-[860px]:gap-0">
+              <ResumeInputCard
+                onResumeChange={setResumeData}
+                hideSampleButton
+                inputMinHeightClassName="min-h-[150px]"
+              />
+              <div className="flex items-center justify-center min-[860px]:px-5">
+                <span className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(15,23,42,0.12)]">
+                  <ArrowRight className="h-[22px] w-[22px] rotate-90 min-[860px]:rotate-0" />
+                </span>
+              </div>
+              <JobDescriptionCard
+                onJobDescriptionChange={setJobDescription}
+                hideSampleButton
+                inputMinHeightClassName="min-h-[150px]"
+              />
             </div>
 
-            <div className="mt-5 rounded-2xl border border-border/85 bg-card p-5 shadow-[0_1px_1px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.04)] sm:px-6 sm:py-[18px]">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-semibold tracking-tight text-foreground">
-                    {canAnalyze ? 'Ready to analyze' : 'Add inputs to continue'}
-                  </p>
-                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Free analysis — no signup needed.
-                  </p>
-                </div>
-                <Button
-                  size="lg"
-                  onClick={onAnalyzeClick}
-                  disabled={!canAnalyze || isAnalyzing}
-                  className="gap-2"
-                >
-                  <Wand2 className="h-4 w-4" />
-                  Analyze resume
-                </Button>
-              </div>
+            <div className="mt-7 flex justify-center">
+              <Button
+                size="lg"
+                onClick={onAnalyzeClick}
+                disabled={!canAnalyze || isAnalyzing}
+                className="gap-2"
+              >
+                <Wand2 className="h-4 w-4" />
+                Analyze resume
+              </Button>
             </div>
 
             <AnalysisProgress

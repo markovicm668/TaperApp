@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/app-header';
 import { AppNavbar } from '@/components/app-navbar';
+import { LandingNavbar } from '@/components/landing/landing-navbar';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -137,25 +138,32 @@ function AuthShell({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="flex min-h-screen flex-col bg-background">
-        {/* Mobile: hamburger header (authenticated only) */}
-        {isAuthed && (
-          <div className="lg:hidden">
-            <AppHeader
-              creditsRemaining={appUser.creditsRemaining}
-              userName={appUser.name}
-              isAuthenticated={isAuthed}
-            />
-          </div>
-        )}
+        {isLandingPage && !isAuthed ? (
+          /* Logged-out landing: dedicated marketing navbar */
+          <LandingNavbar />
+        ) : (
+          <>
+            {/* Mobile: hamburger header (authenticated only) */}
+            {isAuthed && (
+              <div className="lg:hidden">
+                <AppHeader
+                  creditsRemaining={appUser.creditsRemaining}
+                  userName={appUser.name}
+                  isAuthenticated={isAuthed}
+                />
+              </div>
+            )}
 
-        {/* Desktop: top navbar (always shown) */}
-        <div className={isAuthed ? 'hidden lg:block' : ''}>
-          <AppNavbar
-            userName={appUser.name}
-            creditsRemaining={appUser.creditsRemaining}
-            isAuthenticated={isAuthed}
-          />
-        </div>
+            {/* Desktop: top navbar (always shown) */}
+            <div className={isAuthed ? 'hidden lg:block' : ''}>
+              <AppNavbar
+                userName={appUser.name}
+                creditsRemaining={appUser.creditsRemaining}
+                isAuthenticated={isAuthed}
+              />
+            </div>
+          </>
+        )}
 
         <main className="flex-1 overflow-auto">
           {isFullWidthPage ? (

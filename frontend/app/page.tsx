@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -18,8 +18,8 @@ import {
 import { useAuth } from '@/lib/auth/useAuth';
 import { GateScreen, useInAppBrowser } from '@/components/auth/InAppBrowserGate';
 import { track } from '@/lib/analytics';
-import { AnalyzeMock, ScoreCallout } from '@/components/landing/product-mocks';
 import { TryItFreeSection } from '@/components/landing/try-it-free-section';
+import { TailoredDemoSection } from '@/components/landing/tailored-demo-section';
 
 const ACCENT = '#c98a3f';
 const FG_2 = 'rgba(14,21,37,0.62)';
@@ -31,6 +31,36 @@ export default function LandingPage() {
   const { user, loading } = useAuth();
   const detection = useInAppBrowser();
   const [gateOpen, setGateOpen] = useState(false);
+
+  // Reveal sections as they scroll into view. Runs once the main content is
+  // mounted (i.e. after auth finishes loading and the gate isn't showing).
+  useEffect(() => {
+    if (loading) return;
+
+    const els = Array.from(document.querySelectorAll<HTMLElement>('.landing-reveal'));
+    if (els.length === 0) return;
+
+    // No IntersectionObserver (or very old browser): just show everything.
+    if (typeof IntersectionObserver === 'undefined') {
+      els.forEach((el) => el.classList.add('is-in'));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-in');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.18 },
+    );
+
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [loading, gateOpen]);
 
   if (loading) {
     return (
@@ -59,7 +89,8 @@ export default function LandingPage() {
       <HeroA />
       <TryItFreeSection />
       <PainSection />
-      <HeroMockup ctaHref={ctaHref} onCtaClick={handleCtaClick} authed={Boolean(user)} />
+      <TailoredDemoSection />
+      <CtaBlock ctaHref={ctaHref} onCtaClick={handleCtaClick} authed={Boolean(user)} />
 
       {/* <FeaturesSection />
       <HowItWorksSection /> */}
@@ -127,7 +158,7 @@ function HeroA() {
         }}
       >
         <h1
-          className="font-serif"
+          className="font-serif landing-rise"
           style={{
             fontSize: 'clamp(44px, 6.4vw, 64px)',
             fontWeight: 400,
@@ -142,6 +173,7 @@ function HeroA() {
           <span style={{ position: 'relative', display: 'inline-block' }}>
             wildly different
             <svg
+              className="landing-underline"
               width="100%"
               height="14"
               viewBox="0 0 400 14"
@@ -161,12 +193,14 @@ function HeroA() {
           jobs.
         </h1>
         <p
+          className="landing-rise"
           style={{
             fontSize: 17,
             lineHeight: 1.65,
             color: FG_2,
             marginBottom: 0,
             maxWidth: 560,
+            animationDelay: '0.2s',
           }}
         >
           Tailor reads your resume, finds the keywords you&apos;re
@@ -177,14 +211,15 @@ function HeroA() {
   );
 }
 
-function HeroMockup({
+function CtaBlock({
   ctaHref,
   onCtaClick,
   authed,
 }: CtaProps & { authed: boolean }) {
   return (
-    <section style={{ padding: '32px 32px 96px', position: 'relative', overflow: 'hidden' }}>
+    <section style={{ padding: '8px 32px 88px', position: 'relative', overflow: 'hidden' }}>
       <div
+        className="landing-reveal"
         style={{
           maxWidth: 880,
           margin: '0 auto',
@@ -194,52 +229,6 @@ function HeroMockup({
           textAlign: 'center',
         }}
       >
-        <div
-          style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 720,
-            marginBottom: 56,
-          }}
-        >
-          <div style={{ transform: 'rotate(-1deg)' }}>
-            <AnalyzeMock height={380} />
-          </div>
-          <div
-            style={{
-              position: 'absolute',
-              bottom: -26,
-              left: -22,
-              zIndex: 2,
-              transform: 'rotate(-3deg)',
-            }}
-          >
-            <ScoreCallout />
-          </div>
-          <div
-            style={{
-              position: 'absolute',
-              top: -22,
-              right: -10,
-              zIndex: 2,
-              padding: '8px 12px',
-              background: 'var(--card)',
-              border: `1px solid ${BORDER}`,
-              borderRadius: 10,
-              fontSize: 11.5,
-              fontWeight: 500,
-              color: FG_2,
-              transform: 'rotate(3deg)',
-              boxShadow: '0 1px 1px rgba(15,21,37,0.05), 0 12px 28px rgba(15,23,42,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <Sparkles size={12} style={{ color: ACCENT }} /> 12 rewrite suggestions
-          </div>
-        </div>
-
         <div
           style={{
             display: 'flex',
@@ -283,10 +272,7 @@ function HeroMockup({
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> No credit card required
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Check size={12} style={{ color: 'var(--success)' }} /> Free credits on sign up
+Apply less, get more interviews.
           </span>
         </div>
       </div>
@@ -302,7 +288,7 @@ function PainSection() {
   ];
   return (
     <section style={{ padding: '72px 32px', borderTop: `0px solid ${BORDER_SOFT}` }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <div className="landing-reveal" style={{ maxWidth: 1080, margin: '0 auto' }}>
         <div
           className="pain-grid"
           style={{
@@ -666,7 +652,7 @@ function FaqSection() {
   ];
   return (
     <section style={{ padding: '72px 32px 96px', borderTop: `1px solid ${BORDER_SOFT}` }}>
-      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+      <div className="landing-reveal" style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 44 }}>
           <div style={{ ...eyebrowStyle, marginBottom: 14 }}>FAQ</div>
           <h2

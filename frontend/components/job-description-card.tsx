@@ -11,9 +11,15 @@ import { AdminOnly } from '@/components/admin-only';
 interface JobDescriptionCardProps {
   onJobDescriptionChange: (text: string) => void;
   hideSampleButton?: boolean;
+  /** Tailwind min-height class for the textarea. */
+  inputMinHeightClassName?: string;
 }
 
-export function JobDescriptionCard({ onJobDescriptionChange, hideSampleButton = false }: JobDescriptionCardProps) {
+export function JobDescriptionCard({
+  onJobDescriptionChange,
+  hideSampleButton = false,
+  inputMinHeightClassName = 'min-h-[300px]',
+}: JobDescriptionCardProps) {
   const [jobDescription, setJobDescription] = useState('');
 
   // Fire job_description_added once the JD is substantive, from this single
@@ -77,17 +83,11 @@ export function JobDescriptionCard({ onJobDescriptionChange, hideSampleButton = 
         <div className="flex flex-1 flex-col">
           <textarea
             id="job-description"
-            placeholder="Senior Frontend Engineer — Stripe&#10;&#10;About the role&#10;We're hiring a senior frontend engineer to…&#10;&#10;What you'll do&#10;• Architect and ship features in TypeScript&#10;• Design and integrate GraphQL APIs"
-            className="min-h-[300px] w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15"
+            placeholder="Paste the job description here — include the title, responsibilities, and required skills. The more complete it is, the more accurate your match."
+            className={`${inputMinHeightClassName} w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15`}
             value={jobDescription}
             onChange={e => handleChange(e.target.value)}
           />
-          <div className="mt-2.5 flex items-center justify-between px-1 text-[11.5px] text-muted-foreground/80">
-            <span>Include responsibilities, qualifications, and any &ldquo;nice to haves&rdquo;.</span>
-            <span className="font-medium tabular-nums">
-              {jobDescription.length.toLocaleString()} chars · {wordCount} words
-            </span>
-          </div>
         </div>
       </CardContent>
     </Card>

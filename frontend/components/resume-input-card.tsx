@@ -17,6 +17,8 @@ const MAX_PDF_SIZE = 5 * 1024 * 1024;
 interface ResumeInputCardProps {
   onResumeChange: (data: ResumeChangePayload) => void;
   hideSampleButton?: boolean;
+  /** Tailwind min-height class for the input area (textarea / drop zone). */
+  inputMinHeightClassName?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -25,7 +27,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: ResumeInputCardProps) {
+export function ResumeInputCard({
+  onResumeChange,
+  hideSampleButton = false,
+  inputMinHeightClassName = 'min-h-[300px]',
+}: ResumeInputCardProps) {
   const [activeTab, setActiveTab] = useState<InputTab>('pdf');
   const [pastedText, setPastedText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -210,7 +216,7 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
             <textarea
               id="resume-text"
               placeholder="Maya Kowalski&#10;Senior Frontend Engineer&#10;&#10;Experience&#10;Acme Corp — Senior Frontend Engineer (2022–Present)&#10;• Built new features for the web app using React…"
-              className="min-h-[300px] w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15"
+              className={`${inputMinHeightClassName} w-full flex-1 resize-none rounded-xl border border-border/70 bg-muted/55 px-4 py-3.5 text-[13.5px] leading-[1.65] text-foreground outline-none transition-all placeholder:text-muted-foreground/70 focus:border-primary focus:bg-card focus:ring-[3px] focus:ring-primary/15`}
               value={pastedText}
               onChange={e => handlePastedTextChange(e.target.value)}
             />
@@ -251,7 +257,7 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
                 onDragEnter={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                className={`flex min-h-[300px] flex-1 cursor-pointer flex-col items-center justify-center rounded-[14px] border-[1.5px] border-dashed bg-muted/55 px-5 text-center transition-colors ${
+                className={`flex ${inputMinHeightClassName} flex-1 cursor-pointer flex-col items-center justify-center rounded-[14px] border-[1.5px] border-dashed bg-muted/55 px-5 text-center transition-colors ${
                   dragOver
                     ? 'border-primary bg-primary/[0.05]'
                     : 'border-border hover:border-primary/40'
@@ -264,18 +270,8 @@ export function ResumeInputCard({ onResumeChange, hideSampleButton = false }: Re
                   Drop your PDF here
                 </p>
                 <p className="mt-1 text-[12.5px] text-muted-foreground">
-                  or <span className="font-semibold text-primary">browse files</span> · max 5 MB · single page recommended
+                  or <span className="font-semibold text-primary">browse files</span> · max 5 MB
                 </p>
-                <div className="mt-3.5 flex items-center justify-center gap-3.5 text-[11px] text-muted-foreground/80">
-                  <span className="inline-flex items-center gap-1">
-                    <Check className="h-2.5 w-2.5 text-success" strokeWidth={2.5} />
-                    Text-extractable PDFs
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Check className="h-2.5 w-2.5 text-success" strokeWidth={2.5} />
-                    Encrypted in transit
-                  </span>
-                </div>
               </div>
             )}
 
