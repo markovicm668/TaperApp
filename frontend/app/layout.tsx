@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { IBM_Plex_Mono, Inter, Source_Serif_4 } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -33,6 +34,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <Script
+          data-website-id="dfid_dNQW78mhptvPg00g6rV6g"
+          data-domain="trytailor.cv"
+          src="https://datafa.st/js/script.js"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className={`${inter.variable} ${sourceSerif.variable} ${plexMono.variable} font-sans antialiased`}>
         <AppWrapper>{children}</AppWrapper>
         <Analytics />
