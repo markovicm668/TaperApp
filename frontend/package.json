@@ -10,6 +10,7 @@
     "test:resume-store": "node --test --experimental-strip-types --loader ./lib/resume/test-loader.mjs lib/resume/reducer.test.ts lib/resume/storage.test.ts lib/resume/section-order.test.ts lib/resume/section-model.test.ts lib/resume/pdf-selection.test.ts lib/api.test.ts"
   },
   "dependencies": {
+    "@datafast/ai-crawl": "^1.0.5",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
