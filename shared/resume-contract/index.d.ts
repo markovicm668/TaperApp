@@ -317,6 +317,7 @@ export interface ResumeWorkspaceV2 {
   resumeData: ResumeDataV2;
   analysis: {
     resultId: string | null;
+    applicationId: string | null;
     lastAnalysisResult: AnalysisSnapshotV1 | null;
     bulletChanges: BulletChange[];
     ai: {

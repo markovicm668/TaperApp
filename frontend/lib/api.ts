@@ -573,6 +573,23 @@ export async function updateApplicationStatus(
   return json.application as ApplicationSummary;
 }
 
+// Saves the user's edited resume back onto the tracked application so the
+// tracker reopens the edited version instead of the original analysis output.
+export async function updateApplicationParsed(
+  id: string,
+  payload: { parsed: AiParsedResumePayloadV2; bulletChanges: BulletChange[] }
+): Promise<void> {
+  await fetchWithAuth(
+    `/applications/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'Failed to save resume edits'
+  );
+}
+
 export async function deleteApplication(id: string): Promise<void> {
   await fetchWithAuth(
     `/applications/${encodeURIComponent(id)}`,

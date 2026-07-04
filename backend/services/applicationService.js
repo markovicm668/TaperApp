@@ -44,6 +44,8 @@ function toDetail(doc) {
     jobDescription: data.jobDescription || "",
     analysis: data.analysis || null,
     parsed: data.parsed || null,
+    editedBulletChanges: data.editedBulletChanges || null,
+    lastEditedAt: timestampToIso(data.lastEditedAt),
   };
 }
 
@@ -102,6 +104,24 @@ async function updateStatus(uid, id, status) {
   return toSummary(updated);
 }
 
+// Persists the user's edited resume back onto the tracked application so
+// reopening it from the tracker shows the edits. `bulletChanges` is the
+// workspace's accept/reject state, saved so rehydration can restore the
+// diff view without re-applying AI changes over the edited resumeData.
+async function updateParsed(uid, id, { parsed, bulletChanges }) {
+  const doc = await getOwnedDoc(uid, id);
+  if (!doc) return null;
+
+  await doc.ref.update({
+    parsed: stripUndefined(parsed),
+    editedBulletChanges: stripUndefined(Array.isArray(bulletChanges) ? bulletChanges : []),
+    lastEditedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const updated = await doc.ref.get();
+  return toSummary(updated);
+}
+
 async function deleteApplication(uid, id) {
   const doc = await getOwnedDoc(uid, id);
   if (!doc) return null;
@@ -116,5 +136,6 @@ module.exports = {
   listApplications,
   getApplication,
   updateStatus,
+  updateParsed,
   deleteApplication,
 };

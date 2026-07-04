@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
 import { ResumePreview } from '@/components/results/resume-preview';
+import { SmartSticky } from '@/components/results/smart-sticky';
 import { ScoreBreakdownPanel } from '@/components/results/score-breakdown';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { DownloadGateDialog } from '@/components/results/download-gate-dialog';
@@ -34,6 +35,7 @@ import {
   useEffectiveSectionViewModel,
 } from '@/lib/resume/selectors';
 import { useResumeActions } from '@/lib/resume/store';
+import { useRemoteResumeSave } from '@/lib/resume/use-remote-save';
 import { useAuth } from '@/lib/auth/useAuth';
 import { incrementPeopleProperty, track } from '@/lib/analytics';
 import {
@@ -56,7 +58,9 @@ export default function ResultsPage() {
   const canonicalParsePayload = useCanonicalParsePayload();
   const bulletChanges = useBulletChanges();
   const sectionRows = useEffectiveSectionViewModel();
-  const { setBulletChanges, setSectionOrder, applyInlineEdit, resetWorkspace } = useResumeActions();
+  const { setBulletChanges, setSectionOrder, applyInlineEdit, resetWorkspace, setApplicationId } =
+    useResumeActions();
+  useRemoteResumeSave();
   const [isExporting, setIsExporting] = useState(false);
   const [isCopyingJson, setIsCopyingJson] = useState(false);
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
@@ -104,14 +108,19 @@ export default function ResultsPage() {
 
     pendingFlushedRef.current = true;
     createApplication(pending)
-      .then(() => clearPendingApplication())
+      .then(({ id }) => {
+        clearPendingApplication();
+        // Adopt the new application so edits made after signing in (or still
+        // unsaved pre-signin edits) get auto-saved onto it.
+        setApplicationId(id);
+      })
       .catch(error => {
         // Non-fatal: the user still has their results on screen. Allow a retry
         // on the next sign-in/render rather than dropping the work silently.
         pendingFlushedRef.current = false;
         console.error('Failed to persist pre-signin application:', error);
       });
-  }, [user]);
+  }, [setApplicationId, user]);
 
   const resultsViewedRef = useRef(false);
   useEffect(() => {
@@ -228,7 +237,8 @@ export default function ResultsPage() {
           : exportResumePayload;
       const blob = await exportResumePdf(payloadForExport, pdfTemplate);
       const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
-      const titleSlug = (targetRole || '').replace(/\s+/g, '_');
+      const titleSlug = (exportResumePayload.basics?.title || exportResumePayload.basics?.label || targetRole || '')
+        .replace(/\s+/g, '_');
       const fileName = (titleSlug ? `${nameSlug}-${titleSlug}.pdf` : `${nameSlug}.pdf`)
         .replace(/[\/\\:*?"<>|]/g, '_');
 
@@ -431,7 +441,7 @@ export default function ResultsPage() {
       <ScoreBreakdownPanel scores={scores} />
 
       <section className="w-full" aria-label="Diff View">
-        <div className="relative grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
+        <div className="relative grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div
             className={cn(
               'w-full lg:static lg:z-auto lg:opacity-100 lg:pointer-events-auto',
@@ -458,13 +468,13 @@ export default function ResultsPage() {
             )}
             aria-hidden={mobileTab === 'diff' ? true : undefined}
           >
-            <div className="sticky top-4">
+            <SmartSticky>
               <ResumePreview
                 html={preview.html}
                 isLoading={preview.isLoading}
                 error={preview.error}
               />
-            </div>
+            </SmartSticky>
           </div>
         </div>
       </section>

@@ -90,7 +90,8 @@ function BoardColumn({
 export default function HistoryPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { setAnalysisSnapshot, setParsedPayload, resetWorkspace } = useResumeActions();
+  const { setAnalysisSnapshot, setParsedPayload, resetWorkspace, setApplicationId } =
+    useResumeActions();
 
   const [applications, setApplications] = useState<ApplicationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -179,13 +180,22 @@ export default function HistoryPage() {
         // without inheriting a stale section order or bullet edits.
         resetWorkspace();
         setParsedPayload(parsed);
+        // Edited applications store resumeData with AI changes and user edits
+        // already baked in; re-applying the AI changes would overwrite the
+        // user's edits, so restore the saved accept/reject state instead.
+        const hasEdits = Boolean(detail.lastEditedAt);
         setAnalysisSnapshot(
           analysisResultToSnapshot({
             ...result,
+            ...(hasEdits && detail.editedBulletChanges
+              ? { bulletChanges: detail.editedBulletChanges }
+              : {}),
             id: detail.id,
             createdAt: detail.createdAt || result.createdAt,
-          })
+          }),
+          { applyChanges: !hasEdits }
         );
+        setApplicationId(detail.id);
         track('tracker_application_reopened', { application_id: id });
         router.push('/results');
       } catch (err) {
@@ -195,7 +205,7 @@ export default function HistoryPage() {
         setOpeningId(null);
       }
     },
-    [resetWorkspace, router, setAnalysisSnapshot, setParsedPayload]
+    [resetWorkspace, router, setAnalysisSnapshot, setApplicationId, setParsedPayload]
   );
 
   const handleDelete = useCallback(async (id: string) => {

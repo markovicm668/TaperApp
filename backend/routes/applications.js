@@ -68,9 +68,30 @@ function createApplicationsRouter({ service = applicationService } = {}) {
     }
   });
 
+  // PATCH updates either the pipeline status or, when `parsed` is present,
+  // the edited resume payload (see updateParsed for what gets stored).
   router.patch("/:id", async (req, res) => {
     try {
-      const { status } = req.body || {};
+      const { status, parsed, bulletChanges } = req.body || {};
+
+      if (parsed !== undefined) {
+        if (!parsed || typeof parsed !== "object" || !parsed.resumeData || typeof parsed.resumeData !== "object") {
+          return res.status(400).json({
+            error: { code: "INVALID_INPUT", message: "parsed.resumeData is required." },
+          });
+        }
+        const application = await service.updateParsed(req.auth.uid, req.params.id, {
+          parsed,
+          bulletChanges,
+        });
+        if (!application) {
+          return res.status(404).json({
+            error: { code: "APPLICATION_NOT_FOUND", message: "Application not found." },
+          });
+        }
+        return res.status(200).json({ application });
+      }
+
       const application = await service.updateStatus(req.auth.uid, req.params.id, status);
       if (!application) {
         return res.status(404).json({

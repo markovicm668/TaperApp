@@ -155,6 +155,10 @@ export interface ApplicationDetail extends ApplicationSummary {
   jobDescription: string;
   analysis: AnalyzeAiResponse | null;
   parsed: AiParsedResumePayloadV2 | null;
+  // Set once the user edits the resume after analysis; `parsed` then holds
+  // the edited payload and rehydration must not re-apply AI bullet changes.
+  editedBulletChanges: BulletChange[] | null;
+  lastEditedAt: string | null;
 }
 
 export interface UserPreferences {

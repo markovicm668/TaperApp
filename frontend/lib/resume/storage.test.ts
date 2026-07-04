@@ -89,6 +89,53 @@ test('loadWorkspaceFromSession returns valid existing workspace first', () => {
 
   assert.equal(workspace.source.rawText, 'Existing text');
   assert.equal(workspace.version, '2');
+  // Blobs persisted before the field existed default to no linked application.
+  assert.equal(workspace.analysis.applicationId, null);
+});
+
+test('loadWorkspaceFromSession preserves a stored applicationId', () => {
+  const storage = setupWindow();
+  const now = '2026-02-07T00:00:00.000Z';
+
+  storage.setItem(
+    RESUME_WORKSPACE_STORAGE_KEY,
+    JSON.stringify({
+      version: '2',
+      source: {
+        inputType: 'text',
+        rawText: 'Existing text',
+        importedAt: now,
+        parsedAt: now,
+        parser: 'manual',
+      },
+      resumeData: {
+        education: [],
+        work: [],
+        projects: [],
+        awards: [],
+        skills: [],
+        languages: [],
+      },
+      analysis: {
+        resultId: null,
+        applicationId: 'app-1',
+        lastAnalysisResult: null,
+        bulletChanges: [],
+        ai: {
+          parsed: null,
+          reasoning: null,
+        },
+      },
+      timestamps: {
+        createdAt: now,
+        updatedAt: now,
+      },
+    })
+  );
+
+  const workspace = loadWorkspaceFromSession();
+
+  assert.equal(workspace.analysis.applicationId, 'app-1');
 });
 
 test('readWorkspaceFromSession ignores legacy workspace key format', () => {

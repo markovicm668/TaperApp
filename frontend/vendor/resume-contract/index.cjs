@@ -995,6 +995,13 @@ function parseResumeWorkspaceV2(value, path = 'resumeWorkspace') {
       ? null
       : asString(resultIdValue, `${path}.analysis.resultId`);
 
+  // Defaults to null so workspaces persisted before this field existed stay valid.
+  const applicationIdValue = analysis.applicationId;
+  const applicationId =
+    applicationIdValue === null || applicationIdValue === undefined
+      ? null
+      : asString(applicationIdValue, `${path}.analysis.applicationId`);
+
   const lastAnalysisValue = analysis.lastAnalysisResult;
   const lastAnalysisResult =
     lastAnalysisValue === null || lastAnalysisValue === undefined
@@ -1007,6 +1014,7 @@ function parseResumeWorkspaceV2(value, path = 'resumeWorkspace') {
     resumeData: parseResumeDataV2(obj.resumeData, `${path}.resumeData`),
     analysis: {
       resultId,
+      applicationId,
       lastAnalysisResult,
       bulletChanges: asArray(
         analysis.bulletChanges,
@@ -1120,6 +1128,7 @@ function createEmptyWorkspace(overrides = {}) {
     resumeData: createEmptyResumeData(),
     analysis: {
       resultId: null,
+      applicationId: null,
       lastAnalysisResult: null,
       bulletChanges: [],
       ai: {

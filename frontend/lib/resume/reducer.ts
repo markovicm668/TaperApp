@@ -18,6 +18,10 @@ import {
 export interface ResumeStoreState {
   workspace: ResumeWorkspaceV2;
   hydrated: boolean;
+  // Bumped only by user edit actions (never by hydrate/rehydrate), so the
+  // remote auto-save can tell real edits apart from workspace loads. Kept
+  // outside `workspace` so it is never persisted to sessionStorage.
+  editVersion: number;
 }
 
 export type ResumeStoreAction =
@@ -31,8 +35,12 @@ export type ResumeStoreAction =
         clearAnalysis?: boolean;
       };
     }
-  | { type: 'setAnalysisSnapshot'; payload: { snapshot: AnalysisSnapshotV1 | null } }
+  | {
+      type: 'setAnalysisSnapshot';
+      payload: { snapshot: AnalysisSnapshotV1 | null; applyChanges?: boolean };
+    }
   | { type: 'setParsedPayload'; payload: { parsed: AiParsedResumePayloadV2 | null } }
+  | { type: 'setApplicationId'; payload: { applicationId: string | null } }
   | { type: 'setBulletChanges'; payload: { changes: BulletChange[] } }
   | { type: 'setSectionOrder'; payload: { sectionOrder: string[] } }
   | { type: 'applyInlineEdit'; payload: { target: ResumeInlineEditTarget; text: string } }
@@ -41,6 +49,7 @@ export type ResumeStoreAction =
 export const initialResumeStoreState: ResumeStoreState = {
   workspace: createEmptyWorkspace(),
   hydrated: false,
+  editVersion: 0,
 };
 
 function toParsedMeta(parsed: AiParsedResumePayloadV2): AiParsedMetaV2 {
@@ -72,6 +81,7 @@ export function resumeReducer(
   switch (action.type) {
     case 'hydrate': {
       return {
+        ...state,
         workspace: action.payload.workspace,
         hydrated: true,
       };
@@ -98,6 +108,9 @@ export function resumeReducer(
             : {
                 ...state.workspace.analysis,
                 resultId: null,
+                // A fresh analysis creates a new application; edits must not
+                // be saved onto the previous one.
+                applicationId: null,
                 lastAnalysisResult: null,
                 bulletChanges: [],
                 ai: {
@@ -116,15 +129,20 @@ export function resumeReducer(
     case 'setAnalysisSnapshot': {
       const snapshot = action.payload.snapshot;
       const nextBulletChanges = snapshot ? snapshot.bulletChanges : [];
+      // `applyChanges: false` is used when rehydrating an edited application:
+      // the saved resumeData already has the changes (and the user's edits on
+      // top) baked in, so re-applying would clobber those edits.
+      const applyChanges = action.payload.applyChanges !== false;
 
-      const appliedResumeData = snapshot
-        ? applyBulletChangesToResumeData(state.workspace.resumeData, nextBulletChanges, 'ai', snapshot.skillCategoryRenames)
-        : state.workspace.resumeData;
+      const appliedResumeData =
+        snapshot && applyChanges
+          ? applyBulletChangesToResumeData(state.workspace.resumeData, nextBulletChanges, 'ai', snapshot.skillCategoryRenames)
+          : state.workspace.resumeData;
 
       // Replace the resume title with the analysis target role
       const targetRole = snapshot?.targetRole;
       const updatedResumeData =
-        targetRole && snapshot?.status !== 'failed'
+        applyChanges && targetRole && snapshot?.status !== 'failed'
           ? {
               ...appliedResumeData,
               basics: {
@@ -193,9 +211,26 @@ export function resumeReducer(
       };
     }
 
+    case 'setApplicationId': {
+      if (state.workspace.analysis.applicationId === action.payload.applicationId) {
+        return state;
+      }
+      return {
+        ...state,
+        workspace: withUpdatedTimestamp({
+          ...state.workspace,
+          analysis: {
+            ...state.workspace.analysis,
+            applicationId: action.payload.applicationId,
+          },
+        }),
+      };
+    }
+
     case 'setBulletChanges': {
       return {
         ...state,
+        editVersion: state.editVersion + 1,
         workspace: withUpdatedTimestamp({
           ...state.workspace,
           resumeData: applyBulletChangesToResumeData(
@@ -214,6 +249,7 @@ export function resumeReducer(
     case 'setSectionOrder': {
       return {
         ...state,
+        editVersion: state.editVersion + 1,
         workspace: withUpdatedTimestamp({
           ...state.workspace,
           resumeData: {
@@ -247,6 +283,7 @@ export function resumeReducer(
 
       return {
         ...state,
+        editVersion: state.editVersion + 1,
         workspace: withUpdatedTimestamp({
           ...state.workspace,
           resumeData: nextResumeData,

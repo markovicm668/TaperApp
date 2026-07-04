@@ -208,6 +208,58 @@ export function AppNavbar({
                   </AdminOnly>
                 </div>
 
+                {referralCode && (
+                  <Dialog onOpenChange={(open) => { if (!open) setCopied(false); }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="h-8 px-3 text-xs font-medium"
+                        aria-label="Invite friends"
+                        onClick={() => track('nav_invite_clicked')}
+                      >
+                        Get more credits
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="text-base font-semibold">Invite a friend</DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-1 space-y-4">
+                        <div className="space-y-2.5">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">How it works</p>
+                          <ul className="space-y-3">
+                            <li className="flex items-center gap-3 text-sm">
+                              <Share2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>Share your invite link</span>
+                            </li>
+                            <li className="flex items-center gap-3 text-sm">
+                              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>Your friend gets <strong className="font-semibold">3 free credits</strong></span>
+                            </li>
+                            <li className="flex items-center gap-3 text-sm">
+                              <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span>You get <strong className="font-semibold">3 credits</strong> when they complete their first analysis</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground font-mono">
+                            {referralLink}
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full shrink-0 gap-1.5 sm:w-auto"
+                            onClick={handleCopyReferralLink}
+                          >
+                            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copied ? 'Copied!' : 'Copy link'}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+
                 {/* Upgrade to Pro */}
                 <Dialog>
                   <Tooltip>
@@ -301,66 +353,6 @@ export function AppNavbar({
                     </div>
                   </DialogContent>
                 </Dialog>
-
-                {referralCode && (
-                  <Dialog onOpenChange={(open) => { if (!open) setCopied(false); }}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            aria-label="Invite friends"
-                            onClick={() => track('nav_invite_clicked')}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </Button>
-                        </DialogTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Invite friends</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle className="text-base font-semibold">Invite a friend</DialogTitle>
-                      </DialogHeader>
-                      <div className="mt-1 space-y-4">
-                        <div className="space-y-2.5">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">How it works</p>
-                          <ul className="space-y-3">
-                            <li className="flex items-center gap-3 text-sm">
-                              <Share2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>Share your invite link</span>
-                            </li>
-                            <li className="flex items-center gap-3 text-sm">
-                              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>Your friend gets <strong className="font-semibold">3 free credits</strong></span>
-                            </li>
-                            <li className="flex items-center gap-3 text-sm">
-                              <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>You get <strong className="font-semibold">3 credits</strong> when they complete their first analysis</span>
-                            </li>
-                          </ul>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground font-mono">
-                            {referralLink}
-                          </div>
-                          <Button
-                            size="sm"
-                            className="w-full shrink-0 gap-1.5 sm:w-auto"
-                            onClick={handleCopyReferralLink}
-                          >
-                            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copied ? 'Copied!' : 'Copy link'}
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                )}
 
                 <DropdownMenu
                   onOpenChange={(open) => {

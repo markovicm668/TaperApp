@@ -165,7 +165,7 @@ function AuthShell({ children }: { children: ReactNode }) {
           </>
         )}
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1">
           {isFullWidthPage ? (
             children
           ) : (

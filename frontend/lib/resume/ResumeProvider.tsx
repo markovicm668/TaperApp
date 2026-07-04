@@ -75,11 +75,14 @@ export function ResumeProvider({ children }: ResumeProviderProps) {
       }) {
         dispatch({ type: 'setSourceInput', payload });
       },
-      setAnalysisSnapshot(snapshot: AnalysisSnapshotV1 | null) {
-        dispatch({ type: 'setAnalysisSnapshot', payload: { snapshot } });
+      setAnalysisSnapshot(snapshot: AnalysisSnapshotV1 | null, options?: { applyChanges?: boolean }) {
+        dispatch({ type: 'setAnalysisSnapshot', payload: { snapshot, applyChanges: options?.applyChanges } });
       },
       setParsedPayload(parsed: AiParsedResumePayloadV2 | null) {
         dispatch({ type: 'setParsedPayload', payload: { parsed } });
+      },
+      setApplicationId(applicationId: string | null) {
+        dispatch({ type: 'setApplicationId', payload: { applicationId } });
       },
       setBulletChanges(changes: BulletChange[]) {
         dispatch({ type: 'setBulletChanges', payload: { changes } });

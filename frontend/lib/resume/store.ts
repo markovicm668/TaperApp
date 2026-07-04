@@ -17,8 +17,12 @@ export interface ResumeActions {
     fileName?: string;
     clearAnalysis?: boolean;
   }) => void;
-  setAnalysisSnapshot: (snapshot: AnalysisSnapshotV1 | null) => void;
+  setAnalysisSnapshot: (
+    snapshot: AnalysisSnapshotV1 | null,
+    options?: { applyChanges?: boolean }
+  ) => void;
   setParsedPayload: (payload: AiParsedResumePayloadV2 | null) => void;
+  setApplicationId: (applicationId: string | null) => void;
   setBulletChanges: (changes: BulletChange[]) => void;
   setSectionOrder: (sectionOrder: string[]) => void;
   applyInlineEdit: (target: ResumeInlineEditTarget, text: string) => void;

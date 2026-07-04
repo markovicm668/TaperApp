@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 
 // A4 dimensions at 96dpi — same as Puppeteer PDF output (see backend/services/pdfService.js).
 const NATURAL_WIDTH_PX = Math.round((210 * 96) / 25.4); // 794
+const PAGE_HEIGHT_PX = (297 * 96) / 25.4; // 1122.52 — .pdf-page height (297mm)
+const PAGE_GAP_PX = (8 * 96) / 25.4; // 30.24 — body flex gap (8mm) in injectPreviewStyles
 // Content-area height per page: 297mm minus 20mm top + 20mm bottom margins (same as Puppeteer).
 const PAGE_CONTENT_HEIGHT_PX = Math.round(((297 - 40) * 96) / 25.4); // 971
 
@@ -56,6 +58,11 @@ type Atom = {
   sectionSrc: HTMLElement | null;
 };
 
+// The backend now returns preview HTML already split into .pdf-page divs by
+// the same headless-Chrome code that paginates the PDF (see
+// backend/services/pdfService.js renderPaginatedHtml), so page breaks match
+// the download exactly on every device. This client-side copy of the
+// algorithm is only a fallback for unpaginated HTML (e.g. an older backend).
 function paginateDocument(doc: Document): void {
   const body = doc.body;
   if (!body || body.querySelector('.pdf-page')) return;
@@ -197,27 +204,57 @@ export function ResumePreview({ html, isLoading, error, className }: ResumePrevi
     };
   }, []);
 
+  // For paginated documents the height is arithmetic — pages are fixed
+  // 297mm tall with an 8mm gap — so we never depend on scrollHeight, which
+  // mobile WebKit misreports inside scaled/auto-sized iframes.
+  const computeNaturalHeight = (doc: Document): number => {
+    const pageCount = doc.querySelectorAll('.pdf-page').length;
+    if (pageCount > 0) {
+      return Math.round(pageCount * PAGE_HEIGHT_PX + (pageCount - 1) * PAGE_GAP_PX);
+    }
+    return doc.documentElement.scrollHeight;
+  };
+
   const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
     const doc = e.currentTarget.contentDocument;
     if (!doc) return;
 
-    paginateDocument(doc);
-    setNaturalHeight(doc.documentElement.scrollHeight);
+    const finalize = () => {
+      // The iframe remounts on html change (key={previewHtml}); skip if this
+      // document was detached while we waited for fonts.
+      if (!doc.defaultView) return;
 
-    if (docResizeObserverRef.current) {
-      docResizeObserverRef.current.disconnect();
-      docResizeObserverRef.current = null;
-    }
+      paginateDocument(doc);
+      setNaturalHeight(computeNaturalHeight(doc));
 
-    if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => {
-        const h = doc.documentElement.scrollHeight;
-        if (h > 0) {
-          setNaturalHeight(prev => (prev === h ? prev : h));
-        }
-      });
-      ro.observe(doc.documentElement);
-      docResizeObserverRef.current = ro;
+      if (docResizeObserverRef.current) {
+        docResizeObserverRef.current.disconnect();
+        docResizeObserverRef.current = null;
+      }
+
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => {
+          const h = computeNaturalHeight(doc);
+          if (h > 0) {
+            setNaturalHeight(prev => (prev === h ? prev : h));
+          }
+        });
+        ro.observe(doc.documentElement);
+        docResizeObserverRef.current = ro;
+      }
+    };
+
+    if (doc.body?.querySelector('.pdf-page')) {
+      // Server already paginated — page heights are fixed, nothing to wait for.
+      finalize();
+    } else {
+      // Fallback pagination measures text, so wait for fonts to apply first.
+      const fontsReady: Promise<unknown> | undefined = doc.fonts?.ready;
+      if (fontsReady && typeof fontsReady.then === 'function') {
+        fontsReady.then(finalize, finalize);
+      } else {
+        finalize();
+      }
     }
   };
 

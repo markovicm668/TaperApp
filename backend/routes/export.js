@@ -1,17 +1,18 @@
 const express = require("express");
-const { generatePdfFromHtml } = require("../services/pdfService");
+const { generatePdfFromHtml, renderPaginatedHtml } = require("../services/pdfService");
 const { generateResumeHtml, validateResume } = require("../services/resumeTemplate");
 const requireAuth = require("../middleware/requireAuth");
 
 function createExportRouter({
   renderResumeHtml = generateResumeHtml,
   renderPdf = generatePdfFromHtml,
+  paginateHtml = renderPaginatedHtml,
   validate = validateResume,
 } = {}) {
   const router = express.Router();
 
-  // Preview is open to anonymous users — it just renders HTML from a payload
-  // the client already has, no AI/LLM cost. PDF export below requires auth.
+  // Preview is open to anonymous users — it renders HTML from a payload the
+  // client already has, no AI/LLM cost. PDF export below requires auth.
   router.post("/preview", async (req, res) => {
     try {
       const { resume, template } = req.body || {};
@@ -21,7 +22,18 @@ function createExportRouter({
           error: { code: "INVALID_INPUT", message: validation.message },
         });
       }
-      const html = renderResumeHtml(resume, { template });
+      let html = renderResumeHtml(resume, { template });
+      // Paginate server-side so the preview shows the exact page breaks the
+      // PDF will have. Client-side measurement differs per device/engine
+      // (mobile WebKit notoriously so) and must not decide page breaks.
+      try {
+        html = await paginateHtml(html);
+      } catch (paginateErr) {
+        console.warn(
+          "-> Preview pagination failed; returning unpaginated HTML:",
+          paginateErr?.message || paginateErr
+        );
+      }
       return res.status(200).json({ html });
     } catch (err) {
       console.error("-> Preview error:", err);

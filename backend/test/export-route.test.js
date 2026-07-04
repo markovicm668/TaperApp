@@ -43,6 +43,58 @@ async function withServer(deps, run) {
   }
 }
 
+test('POST /export/preview returns server-paginated HTML', { concurrency: false }, async () => {
+  const paginateCalls = [];
+
+  await withServer(
+    {
+      validate: () => ({ ok: true }),
+      renderResumeHtml: () => '<html><body><div class="page">resume</div></body></html>',
+      paginateHtml: async (html) => {
+        paginateCalls.push(html);
+        return '<html><body><div class="pdf-page">resume</div></body></html>';
+      },
+    },
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/export/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume: SAMPLE_RESUME }),
+      });
+
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.html, '<html><body><div class="pdf-page">resume</div></body></html>');
+    }
+  );
+
+  assert.equal(paginateCalls.length, 1);
+  assert.match(paginateCalls[0], /class="page"/);
+});
+
+test('POST /export/preview falls back to unpaginated HTML when pagination fails', { concurrency: false }, async () => {
+  await withServer(
+    {
+      validate: () => ({ ok: true }),
+      renderResumeHtml: () => '<html><body><div class="page">resume</div></body></html>',
+      paginateHtml: async () => {
+        throw new Error('browser crashed');
+      },
+    },
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/export/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume: SAMPLE_RESUME }),
+      });
+
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.html, '<html><body><div class="page">resume</div></body></html>');
+    }
+  );
+});
+
 test('POST /export/pdf renders resume payload', { concurrency: false }, async () => {
   const renderCalls = [];
 

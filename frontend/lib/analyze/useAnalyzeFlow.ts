@@ -27,7 +27,7 @@ export interface AnalyzeFlow {
 
 export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow {
   const router = useRouter();
-  const { setSourceInput, setAnalysisSnapshot, setParsedPayload } = useResumeActions();
+  const { setSourceInput, setAnalysisSnapshot, setParsedPayload, setApplicationId } = useResumeActions();
   const { setTokensRemaining } = useTokens();
   const source: AnalyzeSource = options.source ?? 'analyze_page';
 
@@ -110,6 +110,10 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         if (parsed && parsed.source) {
           setParsedPayload(parsed);
         }
+
+        // Remember which tracked application this workspace belongs to so
+        // later edits can be auto-saved onto it (null for guests).
+        setApplicationId(applicationId ?? null);
 
         // Anonymous analyses aren't saved server-side (no applicationId). Stash
         // the result so it can be persisted to history once the user signs in
@@ -198,7 +202,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         tryNavigateToResults();
       }
     },
-    [setAnalysisSnapshot, setParsedPayload, setSourceInput, setTokensRemaining, source, tryNavigateToResults]
+    [setAnalysisSnapshot, setApplicationId, setParsedPayload, setSourceInput, setTokensRemaining, source, tryNavigateToResults]
   );
 
   const handleAnalysisComplete = useCallback(() => {

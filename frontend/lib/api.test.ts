@@ -5,6 +5,7 @@ import {
   configureApiAuth,
   exportResumePdf,
   parseResume,
+  updateApplicationParsed,
 } from './api.ts';
 import type { ResumePdfPayload } from './types.ts';
 
@@ -72,6 +73,50 @@ test('exportResumePdf posts only resume payload and attaches bearer token', asyn
   assert.deepEqual(capturedBody, {
     resume: SAMPLE_RESUME,
   });
+});
+
+test('updateApplicationParsed patches the application with edits and attaches bearer token', async () => {
+  let capturedUrl: string | null = null;
+  let capturedMethod: string | undefined;
+  let capturedBody: unknown = null;
+  let capturedAuthHeader: string | null = null;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(input);
+    capturedMethod = init?.method;
+    capturedAuthHeader = new Headers(init?.headers).get('Authorization');
+    capturedBody = JSON.parse(String(init?.body || '{}'));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ application: { id: 'app-1' } }),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  const payload = {
+    parsed: {
+      version: '2' as const,
+      resumeData: { work: [], education: [], projects: [], awards: [], skills: [], languages: [] },
+      source: {
+        inputType: 'text' as const,
+        rawText: 'Jane Doe',
+        importedAt: '2026-02-07T00:00:00.000Z',
+        parser: 'manual',
+        parsedAt: '2026-02-07T00:00:00.000Z',
+      },
+      notes: [],
+    },
+    bulletChanges: [
+      { section: 'work', original: 'a', improved: 'b', type: 'modified' as const },
+    ],
+  };
+
+  await updateApplicationParsed('app-1', payload);
+
+  assert.ok(capturedUrl?.endsWith('/applications/app-1'));
+  assert.equal(capturedMethod, 'PATCH');
+  assert.equal(capturedAuthHeader, `Bearer ${TEST_TOKEN}`);
+  assert.deepEqual(capturedBody, payload);
 });
 
 test('analyzeResume routes highlight updates to work, projects, and summary by id', async () => {

@@ -816,3 +816,76 @@ test('skillCategoryRenames renames categories of existing skills', () => {
   assert.equal(node?.category, 'Frontend & Backend');
   assert.equal(teamwork?.category, 'Soft');
 });
+
+test('setApplicationId stores the id; setSourceInput and resetWorkspace clear it', () => {
+  const withId = resumeReducer(initialResumeStoreState, {
+    type: 'setApplicationId',
+    payload: { applicationId: 'app-1' },
+  });
+  assert.equal(withId.workspace.analysis.applicationId, 'app-1');
+
+  const afterNewSource = resumeReducer(withId, {
+    type: 'setSourceInput',
+    payload: { inputType: 'text', rawText: 'New resume text' },
+  });
+  assert.equal(afterNewSource.workspace.analysis.applicationId, null);
+
+  const afterReset = resumeReducer(withId, { type: 'resetWorkspace' });
+  assert.equal(afterReset.workspace.analysis.applicationId, null);
+});
+
+test('setAnalysisSnapshot with applyChanges:false stores changes without touching resumeData', () => {
+  const snapshot = analysisResultToSnapshot(sampleAnalysisResult());
+  const withParsed = stateWithParsedWorkHighlight();
+
+  const next = resumeReducer(withParsed, {
+    type: 'setAnalysisSnapshot',
+    payload: { snapshot, applyChanges: false },
+  });
+
+  assert.equal(next.workspace.analysis.resultId, 'analysis-1');
+  assert.equal(next.workspace.analysis.bulletChanges.length, 1);
+  // The bullet stays as parsed: no AI rewrite applied, no title override.
+  assert.equal(next.workspace.resumeData.work[0]?.highlights?.[0]?.text, 'Built UI components');
+  assert.equal(next.workspace.resumeData.basics?.title, undefined);
+});
+
+test('editVersion bumps only on user edit actions', () => {
+  const withParsed = stateWithParsedWorkHighlight();
+  assert.equal(withParsed.editVersion, 0);
+
+  const snapshot = analysisResultToSnapshot(sampleAnalysisResult());
+  const withAnalysis = resumeReducer(withParsed, {
+    type: 'setAnalysisSnapshot',
+    payload: { snapshot },
+  });
+  assert.equal(withAnalysis.editVersion, 0);
+
+  const afterBulletChanges = resumeReducer(withAnalysis, {
+    type: 'setBulletChanges',
+    payload: { changes: [] },
+  });
+  assert.equal(afterBulletChanges.editVersion, 1);
+
+  const afterSectionOrder = resumeReducer(afterBulletChanges, {
+    type: 'setSectionOrder',
+    payload: { sectionOrder: ['work'] },
+  });
+  assert.equal(afterSectionOrder.editVersion, 2);
+
+  const afterInlineEdit = resumeReducer(afterSectionOrder, {
+    type: 'applyInlineEdit',
+    payload: {
+      target: { kind: 'item', itemKey: 'item:work:highlight:0:0' },
+      text: 'Edited by hand',
+    },
+  });
+  assert.equal(afterInlineEdit.editVersion, 3);
+  assert.equal(afterInlineEdit.workspace.resumeData.work[0]?.highlights?.[0]?.text, 'Edited by hand');
+
+  const afterHydrate = resumeReducer(afterInlineEdit, {
+    type: 'hydrate',
+    payload: { workspace: afterInlineEdit.workspace },
+  });
+  assert.equal(afterHydrate.editVersion, 3);
+});

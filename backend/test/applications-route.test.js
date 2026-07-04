@@ -36,6 +36,14 @@ function createFakeService(seed = {}) {
       app.status = status;
       return app;
     },
+    async updateParsed(uid, id, { parsed, bulletChanges }) {
+      const app = store.get(id);
+      if (!app || app.uid !== uid) return null;
+      app.parsed = parsed;
+      app.editedBulletChanges = Array.isArray(bulletChanges) ? bulletChanges : [];
+      app.lastEditedAt = new Date().toISOString();
+      return app;
+    },
     async deleteApplication(uid, id) {
       const app = store.get(id);
       if (!app || app.uid !== uid) return null;
@@ -164,6 +172,41 @@ test('PATCH /applications/:id updates status and rejects invalid values', { conc
       body: JSON.stringify({ status: 'applied' }),
     });
     assert.equal(foreign.status, 404);
+  });
+});
+
+test('PATCH /applications/:id with parsed saves resume edits on owned application only', { concurrency: false }, async () => {
+  const service = createFakeService(structuredClone(SEED));
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const parsed = { version: '2', resumeData: { basics: { name: 'Edited Name' } } };
+    const bulletChanges = [{ section: 'work', original: 'a', improved: 'b', type: 'modified' }];
+
+    const updated = await fetch(`${baseUrl}/applications/app-1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parsed, bulletChanges }),
+    });
+    assert.equal(updated.status, 200);
+    assert.deepEqual(service.store.get('app-1').parsed, parsed);
+    assert.deepEqual(service.store.get('app-1').editedBulletChanges, bulletChanges);
+    assert.ok(service.store.get('app-1').lastEditedAt);
+
+    const invalid = await fetch(`${baseUrl}/applications/app-1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parsed: { version: '2' } }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, 'INVALID_INPUT');
+
+    const foreign = await fetch(`${baseUrl}/applications/app-2`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parsed }),
+    });
+    assert.equal(foreign.status, 404);
+    assert.equal(service.store.get('app-2').parsed, undefined);
   });
 });
 
