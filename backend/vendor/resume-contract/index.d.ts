@@ -117,7 +117,9 @@ export interface ResumeLanguageItemV2 {
 export interface ResumeSkillItemV2 {
   id?: string;
   name: string;
+  originalName?: string;
   category?: string;
+  source?: string;
 }
 
 export interface ResumeCustomSectionItemV2 {
@@ -217,6 +219,8 @@ export interface KeywordGap {
 }
 
 export interface BulletChange {
+  id?: string;
+  category?: string;
   section: string;
   original: string;
   improved: string;
