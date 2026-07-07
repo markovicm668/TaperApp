@@ -9,57 +9,54 @@ const MARGIN_PX = 16;
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 // Sticky wrapper for content that may be taller than the viewport.
-// When it fits, it acts like plain `sticky top-4`. When taller, it scrolls
-// with the page and pins its bottom edge while scrolling down / its top edge
-// while scrolling up ("smart sticky"). CSS alone can't express this: sticky
-// clamps against the element's natural flow position, so on every scroll
-// direction flip we re-anchor that position (via margin-top) to wherever the
-// element is currently pinned, letting it follow the new direction at once.
+// When it fits, it acts like plain `sticky top-4`. When taller, it follows
+// the page and pins its bottom edge while scrolling down / its top edge while
+// scrolling up. CSS sticky alone can't express this — its constraints clamp
+// against the element's natural flow position — so the scroll handler walks
+// the `top` inset by the scroll delta, clamped between the two pin positions.
+// Mid-page the natural position is far above the viewport, so the sticky
+// position equals the inset exactly; at the column edges normal flow and the
+// containing block take over as with plain sticky.
 export function SmartSticky({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = ref.current;
-    const parent = el?.parentElement;
-    if (!el || !parent) return;
+    if (!el) return;
 
     const mql = window.matchMedia(DESKTOP_QUERY);
     let lastY = window.scrollY;
-    let lastDown: boolean | null = null;
+    let topPx = MARGIN_PX;
     let raf = 0;
 
     const isTall = () => el.offsetHeight > window.innerHeight - MARGIN_PX * 2;
 
+    const setTop = (value: number) => {
+      topPx = value;
+      el.style.top = `${value}px`;
+    };
+
+    const clampTop = (value: number) => {
+      const minTop = window.innerHeight - el.offsetHeight - MARGIN_PX;
+      return Math.min(Math.max(value, minTop), MARGIN_PX);
+    };
+
     const applyConstraints = () => {
+      el.style.bottom = '';
+      el.style.marginTop = '';
       if (!mql.matches || !isTall()) {
-        el.style.top = `${MARGIN_PX}px`;
-        el.style.bottom = '';
-        el.style.marginTop = '';
-        lastDown = null;
+        setTop(MARGIN_PX);
         return;
       }
-      // Symmetric sticky insets clamp the element between "bottom pinned"
-      // (scrolling down) and "top pinned" (scrolling up).
-      const clamp = window.innerHeight - el.offsetHeight - MARGIN_PX;
-      el.style.top = `${clamp}px`;
-      el.style.bottom = `${clamp}px`;
+      setTop(clampTop(topPx));
     };
 
     const onScrollFrame = () => {
       raf = 0;
-      const y = window.scrollY;
-      if (y === lastY) return;
-      const down = y > lastY;
-      lastY = y;
-      if (!mql.matches || !isTall()) return;
-      if (lastDown !== null && down !== lastDown) {
-        const offset =
-          el.getBoundingClientRect().top - parent.getBoundingClientRect().top;
-        // Keep the anchor inside the column so it never stretches the page.
-        const maxOffset = Math.max(0, parent.offsetHeight - el.offsetHeight);
-        el.style.marginTop = `${Math.min(Math.max(offset, 0), maxOffset)}px`;
-      }
-      lastDown = down;
+      const delta = window.scrollY - lastY;
+      lastY = window.scrollY;
+      if (delta === 0 || !mql.matches || !isTall()) return;
+      setTop(clampTop(topPx - delta));
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(onScrollFrame);
