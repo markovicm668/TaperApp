@@ -18,7 +18,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Firebase Authentication Setup
 
-This app uses Firebase Authentication (Google sign-in) and expects these variables in `.env.local`:
+This app uses Firebase Authentication (Google sign-in and email link sign-in) and expects these variables in `.env.local`:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
@@ -33,8 +33,9 @@ NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=""
 In Firebase Console:
 
 1. Enable **Authentication > Sign-in method > Google**.
-2. Add local and production frontend domains under **Authentication > Settings > Authorized domains**.
-3. Use the matching Firebase project in frontend env config.
+2. Enable **Authentication > Sign-in method > Email/Password** and turn on the **Email link (passwordless sign-in)** toggle.
+3. Add local and production frontend domains under **Authentication > Settings > Authorized domains**.
+4. Use the matching Firebase project in frontend env config.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

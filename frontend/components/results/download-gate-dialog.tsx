@@ -1,20 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Chrome, FileDown, Lock, Sparkles } from 'lucide-react';
+import { Chrome, FileDown, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
+import { EmailLinkSignIn } from '@/components/auth/EmailLinkSignIn';
+import {
+  BROWSER_LABEL,
+  useInAppBrowser,
+} from '@/components/auth/InAppBrowserGate';
 
 interface DownloadGateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+const SENT_HINT =
+  'After you sign in, come back to this tab — your resume will be ready to download.';
+
 export function DownloadGateDialog({ open, onOpenChange }: DownloadGateDialogProps) {
   const { user, signInWithGoogle } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const detection = useInAppBrowser();
+  const isInAppBrowser = Boolean(detection?.isInAppBrowser);
+  const inAppLabel = detection?.name ? BROWSER_LABEL[detection.name] : 'this app';
 
   // Auto-close once Firebase reports a user (popup completed successfully).
   useEffect(() => {
@@ -60,15 +71,40 @@ export function DownloadGateDialog({ open, onOpenChange }: DownloadGateDialogPro
               </li>
             </ul>
           </div>
-          <Button
-            className="w-full gap-2"
-            size="lg"
-            onClick={handleContinue}
-            disabled={isSigningIn}
-          >
-            <Chrome className="h-4 w-4" />
-            {isSigningIn ? 'Opening Google...' : 'Continue with Google'}
-          </Button>
+          {isInAppBrowser ? (
+            <>
+              {/* Google OAuth is blocked inside in-app browsers; the emailed
+                  link opens in the real default browser instead. */}
+              <p className="text-sm text-muted-foreground">
+                Google sign-in isn&apos;t available inside {inAppLabel}. Enter
+                your email and we&apos;ll send you a sign-in link that opens in
+                your browser.
+              </p>
+              <EmailLinkSignIn sentHint={SENT_HINT} />
+            </>
+          ) : (
+            <>
+              <Button
+                className="w-full gap-2"
+                size="lg"
+                onClick={handleContinue}
+                disabled={isSigningIn}
+              >
+                <Chrome className="h-4 w-4" />
+                {isSigningIn ? 'Opening Google...' : 'Continue with Google'}
+              </Button>
+
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                  or
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              <EmailLinkSignIn sentHint={SENT_HINT} />
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

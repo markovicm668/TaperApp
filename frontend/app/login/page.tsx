@@ -6,12 +6,18 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/useAuth';
 import { GoogleOneTap } from '@/components/auth/GoogleOneTap';
-import { InAppBrowserGate } from '@/components/auth/InAppBrowserGate';
+import { EmailLinkSignIn } from '@/components/auth/EmailLinkSignIn';
+import {
+  BROWSER_LABEL,
+  useInAppBrowser,
+} from '@/components/auth/InAppBrowserGate';
 import { track } from '@/lib/analytics';
 
 export default function LoginPage() {
   const { signInWithGoogle, loading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const detection = useInAppBrowser();
+  const isInAppBrowser = Boolean(detection?.isInAppBrowser);
 
   useEffect(() => {
     track('login_page_viewed');
@@ -32,30 +38,57 @@ export default function LoginPage() {
     }
   };
 
-  return (
-    <InAppBrowserGate>
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <GoogleOneTap />
-        <div className="w-full max-w-md rounded-2xl border border-border/85 bg-card/90 p-8 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_14px_40px_rgba(15,23,42,0.06)]">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-primary/75">Tailor</p>
-          <h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight text-foreground">
-            Sign in
-          </h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Continue with Google to access your resume analysis workspace.
-          </p>
+  const inAppLabel = detection?.name ? BROWSER_LABEL[detection.name] : 'this app';
 
-          <Button
-            className="mt-6 w-full gap-2"
-            size="lg"
-            onClick={handleSignIn}
-            disabled={loading || isSubmitting}
-          >
-            <Chrome className="h-4 w-4" />
-            {isSubmitting ? 'Opening Google...' : 'Continue with Google'}
-          </Button>
-        </div>
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      {!isInAppBrowser && <GoogleOneTap />}
+      <div className="w-full max-w-md rounded-2xl border border-border/85 bg-card/90 p-8 shadow-[0_1px_1px_rgba(15,23,42,0.05),0_14px_40px_rgba(15,23,42,0.06)]">
+        <p className="text-[11px] font-semibold tracking-[0.08em] text-primary/75">Tailor</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight text-foreground">
+          Sign in
+        </h1>
+        {isInAppBrowser ? (
+          <>
+            {/* Google OAuth is blocked inside in-app browsers; the emailed
+                link opens in the real default browser instead. */}
+            <p className="mt-3 text-sm text-muted-foreground">
+              Google sign-in isn&apos;t available inside {inAppLabel}. Enter
+              your email and we&apos;ll send you a sign-in link that opens in
+              your browser.
+            </p>
+            <div className="mt-6">
+              <EmailLinkSignIn />
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Continue with Google or get a sign-in link by email.
+            </p>
+
+            <Button
+              className="mt-6 w-full gap-2"
+              size="lg"
+              onClick={handleSignIn}
+              disabled={loading || isSubmitting}
+            >
+              <Chrome className="h-4 w-4" />
+              {isSubmitting ? 'Opening Google...' : 'Continue with Google'}
+            </Button>
+
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                or
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <EmailLinkSignIn />
+          </>
+        )}
       </div>
-    </InAppBrowserGate>
+    </div>
   );
 }

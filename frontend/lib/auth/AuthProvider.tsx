@@ -14,7 +14,10 @@ import {
   GoogleAuthProvider,
   getAdditionalUserInfo,
   getRedirectResult,
+  isSignInWithEmailLink,
   onAuthStateChanged,
+  sendSignInLinkToEmail,
+  signInWithEmailLink,
   signInWithPopup,
   signInWithRedirect,
   signOut as firebaseSignOut,
@@ -26,6 +29,7 @@ import {
 } from '@/lib/firebase/client';
 import { configureApiAuth } from '@/lib/api';
 import { detectInAppBrowser } from '@/lib/auth/detectInAppBrowser';
+import { clearEmailForSignIn, saveEmailForSignIn } from '@/lib/auth/emailLink';
 
 interface GetIdTokenOptions {
   forceRefresh?: boolean;
@@ -35,6 +39,9 @@ export interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  sendEmailSignInLink: (email: string) => Promise<void>;
+  completeEmailLinkSignIn: (email: string) => Promise<{ isNewUser: boolean }>;
+  isEmailLinkSignIn: () => boolean;
   signOut: () => Promise<void>;
   getIdToken: (options?: GetIdTokenOptions) => Promise<string | null>;
 }
@@ -43,6 +50,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const GOOGLE_PROVIDER = new GoogleAuthProvider();
 GOOGLE_PROVIDER.setCustomParameters({ prompt: 'select_account' });
+
+function firebaseNotConfiguredError(): Error {
+  return new Error(
+    `Firebase auth is not configured. Missing: ${getMissingFirebaseConfigKeys().join(', ')}. If you just updated .env.local, restart the Next.js dev server.`
+  );
+}
 
 function isPopupBlockedError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -80,9 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     if (!firebaseEnabled) {
-      throw new Error(
-        `Firebase auth is not configured. Missing: ${getMissingFirebaseConfigKeys().join(', ')}. If you just updated .env.local, restart the Next.js dev server.`
-      );
+      throw firebaseNotConfiguredError();
     }
 
     if (detectInAppBrowser().isInAppBrowser) {
@@ -110,6 +121,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw error;
     }
+  }, [firebaseEnabled]);
+
+  // Intentionally no in-app browser check on the email link flow: sending the
+  // link is a plain request that works inside webviews, and the emailed link
+  // opens in the user's default browser.
+  const sendEmailSignInLink = useCallback(
+    async (email: string) => {
+      if (!firebaseEnabled) {
+        throw firebaseNotConfiguredError();
+      }
+
+      const auth = getFirebaseAuth();
+      await sendSignInLinkToEmail(auth, email, {
+        url: `${window.location.origin}/login`,
+        handleCodeInApp: true,
+      });
+      saveEmailForSignIn(email);
+    },
+    [firebaseEnabled]
+  );
+
+  const completeEmailLinkSignIn = useCallback(
+    async (email: string) => {
+      if (!firebaseEnabled) {
+        throw firebaseNotConfiguredError();
+      }
+
+      const auth = getFirebaseAuth();
+      const credential = await signInWithEmailLink(auth, email, window.location.href);
+      clearEmailForSignIn();
+      return { isNewUser: getAdditionalUserInfo(credential)?.isNewUser ?? false };
+    },
+    [firebaseEnabled]
+  );
+
+  const isEmailLinkSignIn = useCallback(() => {
+    if (typeof window === 'undefined' || !firebaseEnabled) return false;
+    return isSignInWithEmailLink(getFirebaseAuth(), window.location.href);
   }, [firebaseEnabled]);
 
   const signOut = useCallback(async () => {
@@ -161,10 +210,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       signInWithGoogle,
+      sendEmailSignInLink,
+      completeEmailLinkSignIn,
+      isEmailLinkSignIn,
       signOut,
       getIdToken,
     }),
-    [user, loading, signInWithGoogle, signOut, getIdToken]
+    [
+      user,
+      loading,
+      signInWithGoogle,
+      sendEmailSignInLink,
+      completeEmailLinkSignIn,
+      isEmailLinkSignIn,
+      signOut,
+      getIdToken,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

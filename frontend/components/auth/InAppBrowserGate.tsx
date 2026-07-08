@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import {
   type InAppBrowserName,
 } from '@/lib/auth/detectInAppBrowser';
 
-const BROWSER_LABEL: Record<InAppBrowserName, string> = {
+export const BROWSER_LABEL: Record<InAppBrowserName, string> = {
   linkedin: 'LinkedIn',
   facebook: 'Facebook',
   instagram: 'Instagram',
@@ -108,18 +108,3 @@ export function GateScreen({ detection }: { detection: InAppBrowserDetection }) 
   );
 }
 
-export function InAppBrowserGate({ children }: { children: ReactNode }) {
-  const [detection, setDetection] = useState<InAppBrowserDetection | null>(
-    null
-  );
-
-  useEffect(() => {
-    setDetection(detectInAppBrowser());
-  }, []);
-
-  if (detection?.isInAppBrowser) {
-    return <GateScreen detection={detection} />;
-  }
-
-  return <>{children}</>;
-}

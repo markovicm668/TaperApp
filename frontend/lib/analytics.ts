@@ -27,6 +27,7 @@ type AnalyticsEvent =
   | 'nav_mobile_menu_opened'
   | 'login_page_viewed'
   | 'signin_started'
+  | 'signin_email_link_sent'
   | 'signin_completed'
   | 'signin_failed'
   | 'resume_uploaded'

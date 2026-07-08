@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:resume-store": "node --test --experimental-strip-types --loader ./lib/resume/test-loader.mjs lib/resume/reducer.test.ts lib/resume/storage.test.ts lib/resume/section-order.test.ts lib/resume/section-model.test.ts lib/resume/pdf-selection.test.ts lib/api.test.ts"
+    "test:resume-store": "node --test --experimental-strip-types --loader ./lib/resume/test-loader.mjs lib/resume/reducer.test.ts lib/resume/storage.test.ts lib/resume/section-order.test.ts lib/resume/section-model.test.ts lib/resume/pdf-selection.test.ts lib/api.test.ts lib/auth/emailLink.test.ts"
   },
   "dependencies": {
     "@datafast/ai-crawl": "^1.0.5",
