@@ -16,8 +16,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tailor - Tailor resumes to job description with AI-powered keyword matching and optimization',
-  description: 'Tailor your resume to any job description with AI-powered keyword matching, ATS optimization, and rewrite suggestions.',
+  title: 'Tailor - Tailor resumes to job description with keyword matching and optimization',
+  description: 'Tailor your resume to any job description with keyword matching, ATS optimization, and rewrite suggestions.',
   generator: 'v0.app',
   icons: {
     icon: '/favicon.ico',
