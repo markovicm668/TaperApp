@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
 import { AnalysisProgress } from '@/components/analysis-progress';
+import { OutOfCreditsDialog } from '@/components/out-of-credits-dialog';
 import { parseResume, parseResumePdf } from '@/lib/api';
 import { useAnalyzeFlow } from '@/lib/analyze/useAnalyzeFlow';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAdmin } from '@/lib/auth/useAdmin';
 import { useTokens } from '@/lib/tokens/TokenContext';
+import { track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 interface StatusPillProps {
@@ -55,14 +57,21 @@ export default function AnalyzePage() {
     setParsedPayload,
     resetWorkspace,
   } = useResumeActions();
-  const { tokensRemaining, setTokensRemaining } = useTokens();
+  const { tokensRemaining, tokensLoading, setTokensRemaining } = useTokens();
   const { isAdmin } = useAdmin();
 
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
   const [jobDescription, setJobDescription] = useState('');
   const [isParsingOnly, setIsParsingOnly] = useState(false);
 
-  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow({
+  const {
+    isAnalyzing,
+    parseDone,
+    handleAnalyze,
+    handleAnalysisComplete,
+    showOutOfCredits,
+    setShowOutOfCredits,
+  } = useAnalyzeFlow({
     source: 'analyze_page',
   });
 
@@ -75,8 +84,13 @@ export default function AnalyzePage() {
 
   const handleAnalyzeClick = useCallback(() => {
     if (!resumeData || !jobDescription) return;
+    if (!tokensLoading && tokensRemaining <= 0) {
+      track('analysis_blocked_out_of_credits', { source: 'analyze_page' });
+      setShowOutOfCredits(true);
+      return;
+    }
     void handleAnalyze(resumeData, jobDescription);
-  }, [handleAnalyze, jobDescription, resumeData]);
+  }, [handleAnalyze, jobDescription, resumeData, tokensLoading, tokensRemaining, setShowOutOfCredits]);
 
   const handleParseOnly = useCallback(async () => {
     if (!resumeData) return;
@@ -269,6 +283,7 @@ export default function AnalyzePage() {
       </div>
 
       <AnalysisProgress open={isAnalyzing} parseDone={parseDone} onComplete={handleAnalysisComplete} />
+      <OutOfCreditsDialog open={showOutOfCredits} onOpenChange={setShowOutOfCredits} />
     </div>
   );
 }

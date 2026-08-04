@@ -4,6 +4,7 @@ const {
   lookupUserByReferralCode,
   recordReferral,
 } = require("../services/referralService");
+const requireAdmin = require("../middleware/requireAdmin");
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-router.post("/add-credits", async (req, res, next) => {
+router.post("/add-credits", requireAdmin, async (req, res, next) => {
   try {
     const newBalance = await addTokens(req.auth.uid, 100);
     res.json({ tokensRemaining: newBalance });

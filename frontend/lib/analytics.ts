@@ -19,6 +19,8 @@ type AnalyticsEvent =
   | 'nav_upgrade_confirmed_clicked'
   | 'nav_invite_clicked'
   | 'nav_referral_link_copied'
+  | 'analysis_blocked_out_of_credits'
+  | 'upsell_buy_credits_clicked'
   | 'nav_profile_menu_opened'
   | 'nav_profile_settings_clicked'
   | 'nav_signout_clicked'

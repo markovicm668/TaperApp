@@ -3,14 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowUpCircle, BarChart3, Check, Copy, FileSearch, Gift, HelpCircle, LayoutGrid, Settings, Share2, Sparkles, UserPlus, Zap } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Copy, FileSearch, HelpCircle, LayoutGrid, Settings, Sparkles, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { cn } from '@/lib/utils';
+import { track } from '@/lib/analytics';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { InviteFriendPanel } from '@/components/invite-friend-panel';
 import {
   Dialog,
   DialogContent,
@@ -59,7 +61,6 @@ export function AppSidebar({
   const hasResults = useHasResults();
   const isCompact = mode === 'compact';
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
   const { signOut } = useAuth();
   const { referralCode } = useTokens();
@@ -76,8 +77,7 @@ export function AppSidebar({
   const handleCopyReferralLink = () => {
     if (!referralLink) return;
     navigator.clipboard.writeText(referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    track('nav_referral_link_copied', { source: 'sidebar_compact' });
   };
   const [homeItem, ...mainItems] = navItems;
   const initials =
@@ -451,14 +451,25 @@ export function AppSidebar({
                       ))}
                     </div>
                     <div className="space-y-2">
-                      <Button className="w-full">Upgrade to Tailor Pro</Button>
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          track('nav_upgrade_confirmed_clicked', { plan: selectedPlan });
+                          toast.info('Tailor Pro is launching soon', {
+                            description:
+                              "Paid plans aren't live yet — invite a friend for free credits in the meantime.",
+                          });
+                        }}
+                      >
+                        Upgrade to Tailor Pro
+                      </Button>
                       <p className="text-center text-xs text-muted-foreground">Renews automatically · Cancel anytime</p>
                     </div>
                   </DialogContent>
                 </Dialog>
 
                 {isAuthenticated && referralCode && (
-                  <Dialog onOpenChange={(open) => { if (!open) setCopied(false); }}>
+                  <Dialog>
                     <DialogTrigger asChild>
                       <Button
                         variant="outline"
@@ -472,37 +483,8 @@ export function AppSidebar({
                       <DialogHeader>
                         <DialogTitle className="text-base font-semibold">Invite a friend</DialogTitle>
                       </DialogHeader>
-                      <div className="mt-1 space-y-4">
-                        <div className="space-y-2.5">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">How it works</p>
-                          <ul className="space-y-3">
-                            <li className="flex items-center gap-3 text-sm">
-                              <Share2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>Share your invite link</span>
-                            </li>
-                            <li className="flex items-center gap-3 text-sm">
-                              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>Your friend gets <strong className="font-semibold">3 free credits</strong></span>
-                            </li>
-                            <li className="flex items-center gap-3 text-sm">
-                              <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span>You get <strong className="font-semibold">3 credits</strong> when they complete their first analysis</span>
-                            </li>
-                          </ul>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <div className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
-                            {referralLink}
-                          </div>
-                          <Button
-                            size="sm"
-                            className="w-full shrink-0 gap-1.5 sm:w-auto"
-                            onClick={handleCopyReferralLink}
-                          >
-                            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copied ? 'Copied!' : 'Copy link'}
-                          </Button>
-                        </div>
+                      <div className="mt-1">
+                        <InviteFriendPanel source="sidebar" />
                       </div>
                     </DialogContent>
                   </Dialog>

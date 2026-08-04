@@ -23,6 +23,7 @@ Set these values in `.env`:
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (single-line JSON string for a Firebase service account key), or
 - `FIREBASE_SERVICE_ACCOUNT_PATH` (absolute path to a Firebase service account JSON file)
 - `CORS_ALLOWED_ORIGIN` (optional, defaults to `http://localhost:3000`)
+- `ADMIN_EMAIL` (optional; required for `POST /user/me/add-credits` to work — must match the signed-in admin's Firebase account email)
 
 Run locally:
 
@@ -162,6 +163,7 @@ Errors:
   - At least one of `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH` is required.
 - `CORS_ALLOWED_ORIGIN` (optional): comma-separated list of allowed frontend origins (default `http://localhost:3000`)
 - `PORT` (optional): defaults to `8080` (Cloud Run standard)
+- `ADMIN_EMAIL` (optional): email of the account allowed to call `POST /user/me/add-credits`; the route 403s for everyone if unset
 
 ## Docker (Cloud Run ready)
 

@@ -5,6 +5,7 @@ import { fetchUserProfile } from '@/lib/api';
 
 interface TokenContextValue {
   tokensRemaining: number;
+  tokensLoading: boolean;
   referralCode: string | null;
   refreshTokens: () => Promise<void>;
   setTokensRemaining: (tokens: number) => void;
@@ -20,6 +21,7 @@ export function TokenProvider({
   children: ReactNode;
 }) {
   const [tokensRemaining, setTokensRemaining] = useState(0);
+  const [tokensLoading, setTokensLoading] = useState(true);
   const [referralCode, setReferralCode] = useState<string | null>(null);
 
   const refreshTokens = useCallback(async () => {
@@ -39,19 +41,25 @@ export function TokenProvider({
       }
     } catch (err) {
       console.error('Failed to fetch token balance:', err);
+    } finally {
+      setTokensLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
+      setTokensLoading(true);
       refreshTokens();
     } else {
       setTokensRemaining(0);
+      setTokensLoading(false);
     }
   }, [isAuthenticated, refreshTokens]);
 
   return (
-    <TokenContext.Provider value={{ tokensRemaining, referralCode, refreshTokens, setTokensRemaining }}>
+    <TokenContext.Provider
+      value={{ tokensRemaining, tokensLoading, referralCode, refreshTokens, setTokensRemaining }}
+    >
       {children}
     </TokenContext.Provider>
   );

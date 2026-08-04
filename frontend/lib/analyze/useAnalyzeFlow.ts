@@ -8,6 +8,7 @@ import { savePendingApplication } from '@/lib/analyze/pendingApplication';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
+import { useAuth } from '@/lib/auth/useAuth';
 import { incrementPeopleProperty, track } from '@/lib/analytics';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
@@ -23,16 +24,20 @@ export interface AnalyzeFlow {
   parseDone: boolean;
   handleAnalyze: (resumeData: ResumeInput, jobDescription: string) => Promise<void>;
   handleAnalysisComplete: () => void;
+  showOutOfCredits: boolean;
+  setShowOutOfCredits: (show: boolean) => void;
 }
 
 export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow {
   const router = useRouter();
   const { setSourceInput, setAnalysisSnapshot, setParsedPayload, setApplicationId } = useResumeActions();
-  const { setTokensRemaining } = useTokens();
+  const { tokensRemaining, tokensLoading, setTokensRemaining } = useTokens();
+  const { user } = useAuth();
   const source: AnalyzeSource = options.source ?? 'analyze_page';
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseDone, setParseDone] = useState(false);
+  const [showOutOfCredits, setShowOutOfCredits] = useState(false);
 
   // Both flags must be true before we navigate to results.
   // Using refs so the check always reads latest values without stale closures.
@@ -55,6 +60,16 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
   const handleAnalyze = useCallback(
     async (resumeData: ResumeInput, jobDescription: string) => {
       if (!resumeData || !jobDescription) return;
+
+      // Safety net for any caller that doesn't pre-check balance itself (the
+      // primary guard lives in the click handler, e.g. app/analyze/page.tsx).
+      // Gated on tokensLoading so we never false-positive during the brief
+      // window before the balance has loaded for a freshly-funded user.
+      if (user && !tokensLoading && tokensRemaining <= 0) {
+        track('analysis_blocked_out_of_credits', { source });
+        setShowOutOfCredits(true);
+        return;
+      }
 
       setParseDone(false);
       apiDoneRef.current = false;
@@ -157,11 +172,13 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
           (err as { code: string }).code === 'INSUFFICIENT_TOKENS'
         ) {
           track('analysis_failed', { source, reason: 'insufficient_tokens' });
-          toast.error('Insufficient tokens', {
-            description: (err as unknown as Error).message,
-          });
+          const tokensErr = err as { tokensRemaining?: number };
+          if (typeof tokensErr.tokensRemaining === 'number') {
+            setTokensRemaining(tokensErr.tokensRemaining);
+          }
           setParseDone(true);
           setIsAnalyzing(false);
+          setShowOutOfCredits(true);
           return;
         }
 
@@ -202,7 +219,18 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         tryNavigateToResults();
       }
     },
-    [setAnalysisSnapshot, setApplicationId, setParsedPayload, setSourceInput, setTokensRemaining, source, tryNavigateToResults]
+    [
+      setAnalysisSnapshot,
+      setApplicationId,
+      setParsedPayload,
+      setSourceInput,
+      setTokensRemaining,
+      source,
+      tryNavigateToResults,
+      user,
+      tokensLoading,
+      tokensRemaining,
+    ]
   );
 
   const handleAnalysisComplete = useCallback(() => {
@@ -210,5 +238,12 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
     tryNavigateToResults();
   }, [tryNavigateToResults]);
 
-  return { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete };
+  return {
+    isAnalyzing,
+    parseDone,
+    handleAnalyze,
+    handleAnalysisComplete,
+    showOutOfCredits,
+    setShowOutOfCredits,
+  };
 }

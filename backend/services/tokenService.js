@@ -70,6 +70,11 @@ async function deductTokens(uid, cost) {
   });
 }
 
+async function getTokensRemaining(uid) {
+  const snap = await getUserRef(uid).get();
+  return snap.exists ? snap.data().tokensRemaining : INITIAL_TOKENS;
+}
+
 async function addTokens(uid, amount) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
@@ -96,4 +101,5 @@ module.exports = {
   ensureUser,
   deductTokens,
   addTokens,
+  getTokensRemaining,
 };
