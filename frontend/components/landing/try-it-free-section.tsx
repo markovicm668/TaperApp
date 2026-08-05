@@ -28,16 +28,20 @@ export function TryItFreeSection() {
   // resume_uploaded / job_description_added are emitted from the shared
   // ResumeInputCard / JobDescriptionCard components, so they fire here too.
 
-  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete } = useAnalyzeFlow({
-    source: 'landing',
-    onAnalyzed: () => {
-      if (!user) markFreeAnalysisUsed();
-    },
-  });
+  const { isAnalyzing, parseDone, handleAnalyze, handleAnalysisComplete, showSignupPrompt } =
+    useAnalyzeFlow({
+      source: 'landing',
+      onAnalyzed: () => {
+        if (!user) markFreeAnalysisUsed();
+      },
+    });
 
   const canAnalyze = Boolean(resumeData) && jobDescription.trim().length > 50;
   const isGuest = !loading && !user;
-  const blockedAsGuest = isGuest && usedFree;
+  // showSignupPrompt fires when the server rejects a second free analysis
+  // (FREE_TRIAL_USED) even if the local flag was cleared — the server is the
+  // source of truth now.
+  const blockedAsGuest = isGuest && (usedFree || showSignupPrompt);
 
   const onAnalyzeClick = () => {
     if (!resumeData || !jobDescription) return;

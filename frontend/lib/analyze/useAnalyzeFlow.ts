@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
 import { savePendingApplication } from '@/lib/analyze/pendingApplication';
+import { markFreeAnalysisUsed } from '@/lib/freeAnalysis';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
@@ -26,18 +27,21 @@ export interface AnalyzeFlow {
   handleAnalysisComplete: () => void;
   showOutOfCredits: boolean;
   setShowOutOfCredits: (show: boolean) => void;
+  showSignupPrompt: boolean;
+  setShowSignupPrompt: (show: boolean) => void;
 }
 
 export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow {
   const router = useRouter();
   const { setSourceInput, setAnalysisSnapshot, setParsedPayload, setApplicationId } = useResumeActions();
   const { tokensRemaining, tokensLoading, setTokensRemaining } = useTokens();
-  const { user } = useAuth();
+  const { user, ensureAnonymousUser } = useAuth();
   const source: AnalyzeSource = options.source ?? 'analyze_page';
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseDone, setParseDone] = useState(false);
   const [showOutOfCredits, setShowOutOfCredits] = useState(false);
+  const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
   // Both flags must be true before we navigate to results.
   // Using refs so the check always reads latest values without stale closures.
@@ -92,6 +96,11 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
       });
 
       try {
+        // Ensure a Firebase session exists (anonymous for account-less guests)
+        // so the request carries a token — the server now rejects token-less
+        // requests. No-op for signed-in users.
+        await ensureAnonymousUser();
+
         // Step 1: Parse resume separately so the progress dialog
         // reflects real parse time (free; only the analysis step is billed).
         const parseResult = resumeData.file
@@ -165,12 +174,22 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         apiDoneRef.current = true;
         tryNavigateToResults();
       } catch (err: unknown) {
-        if (
-          err &&
-          typeof err === 'object' &&
-          'code' in err &&
-          (err as { code: string }).code === 'INSUFFICIENT_TOKENS'
-        ) {
+        const errorCode =
+          err && typeof err === 'object' && 'code' in err
+            ? (err as { code: string }).code
+            : undefined;
+
+        if (errorCode === 'FREE_TRIAL_USED') {
+          // Anonymous visitor has spent their one free analysis. Prompt signup.
+          track('analysis_failed', { source, reason: 'free_trial_used' });
+          markFreeAnalysisUsed();
+          setParseDone(true);
+          setIsAnalyzing(false);
+          setShowSignupPrompt(true);
+          return;
+        }
+
+        if (errorCode === 'INSUFFICIENT_TOKENS') {
           track('analysis_failed', { source, reason: 'insufficient_tokens' });
           const tokensErr = err as { tokensRemaining?: number };
           if (typeof tokensErr.tokensRemaining === 'number') {
@@ -230,6 +249,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
       user,
       tokensLoading,
       tokensRemaining,
+      ensureAnonymousUser,
     ]
   );
 
@@ -245,5 +265,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
     handleAnalysisComplete,
     showOutOfCredits,
     setShowOutOfCredits,
+    showSignupPrompt,
+    setShowSignupPrompt,
   };
 }

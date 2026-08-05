@@ -11,10 +11,8 @@ const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
 const applicationsRoute = require("./routes/applications");
 const requireAuth = require("./middleware/requireAuth");
-const requireTokens = require("./middleware/requireTokens");
-const optionalAuth = require("./middleware/optionalAuth");
-const optionalTokens = require("./middleware/optionalTokens");
-const requirePositiveBalance = require("./middleware/requirePositiveBalance");
+const chargeAnalysis = require("./middleware/chargeAnalysis");
+const requireAnalyzeEligibility = require("./middleware/requireAnalyzeEligibility");
 
 const app = express();
 
@@ -46,15 +44,15 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.use("/user/me", requireAuth, userRoute);
-// Only the analysis itself costs a credit; parsing is a free prerequisite step
-// for anyone who could actually afford the analysis. requirePositiveBalance
-// blocks (without charging) authenticated users who are already at 0 tokens,
-// so a real Gemini parse call is never burned on a request that can only
-// 402 anyway. Anonymous users are exempt (free trial). optionalTokens(1) on
-// /analyze remains the only place a token is ever actually deducted.
-app.use("/analyze", optionalAuth, optionalTokens(1), analyzeRoute);
-app.use("/parse", optionalAuth, requirePositiveBalance(1), parseRoute);
-app.use("/parse-pdf", optionalAuth, requirePositiveBalance(1), parsePdfRoute);
+// All three AI endpoints require a valid Firebase token (anonymous or real) so
+// a token-less request is rejected outright — this closes the "drop the header
+// for unlimited free analyses" exploit. chargeAnalysis is the only place a
+// token is deducted (real user) or a free trial consumed (anonymous user);
+// requireAnalyzeEligibility is a read-only gate so a Gemini parse is never
+// burned on a request that could only 402 at /analyze anyway.
+app.use("/analyze", requireAuth, chargeAnalysis(1), analyzeRoute);
+app.use("/parse", requireAuth, requireAnalyzeEligibility(1), parseRoute);
+app.use("/parse-pdf", requireAuth, requireAnalyzeEligibility(1), parsePdfRoute);
 // /export/preview is anonymous-friendly; /export/pdf has its own requireAuth
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);

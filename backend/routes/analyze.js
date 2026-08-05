@@ -4,6 +4,7 @@ const { analyzeResume } = require("../services/geminiService");
 const { parseResumeSections } = require("../services/geminiParseService");
 const { claimReferralReward } = require("../services/referralService");
 const { createApplication } = require("../services/applicationService");
+const { isAnonymousRequest } = require("../utils/authClaims");
 
 router.post("/", async (req, res) => {
   const sw = { _start: Date.now(), _steps: [] };
@@ -55,9 +56,13 @@ router.post("/", async (req, res) => {
       `\n   ${"TOTAL".padEnd(20)} ${String(total).padStart(6)}ms\n`
     );
 
+    // Every request is authenticated now (anonymous or real), so gate the
+    // real-account-only side effects on the caller not being anonymous.
+    const isRealUser = !isAnonymousRequest(req);
+
     // Credit referrer on referee's first analysis (fire-and-forget).
     // Skipped for anonymous (free-trial) requests.
-    if (req.auth?.uid) {
+    if (isRealUser) {
       claimReferralReward(req.auth.uid).catch((err) =>
         console.error("-> Referral reward error:", err)
       );
@@ -67,7 +72,7 @@ router.post("/", async (req, res) => {
     // Anonymous (free-trial) analyses are not saved. A save failure must
     // never fail the analysis the user already paid for.
     let applicationId = null;
-    if (req.auth?.uid) {
+    if (isRealUser) {
       try {
         const created = await createApplication(req.auth.uid, {
           company: result?.meta?.company || "",

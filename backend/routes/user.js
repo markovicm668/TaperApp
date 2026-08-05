@@ -5,11 +5,18 @@ const {
   recordReferral,
 } = require("../services/referralService");
 const requireAdmin = require("../middleware/requireAdmin");
+const { isAnonymousRequest } = require("../utils/authClaims");
 
 const router = express.Router();
 
 router.get("/", async (req, res, next) => {
   try {
+    // Anonymous (free-trial) users have no real account; never mint a
+    // 5-token user doc for them via ensureUser.
+    if (isAnonymousRequest(req)) {
+      return res.json({ tokensRemaining: 0, referralCode: null });
+    }
+
     const refCode = req.query.ref || null;
     const userData = await ensureUser(req.auth.uid);
 

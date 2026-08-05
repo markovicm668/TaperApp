@@ -17,6 +17,7 @@ import {
   isSignInWithEmailLink,
   onAuthStateChanged,
   sendSignInLinkToEmail,
+  signInAnonymously,
   signInWithEmailLink,
   signInWithPopup,
   signInWithRedirect,
@@ -44,6 +45,10 @@ export interface AuthContextValue {
   isEmailLinkSignIn: () => boolean;
   signOut: () => Promise<void>;
   getIdToken: (options?: GetIdTokenOptions) => Promise<string | null>;
+  // Ensures a Firebase session exists (creating an anonymous one if needed) so
+  // an account-less visitor's analyze request carries a token. No-op when a
+  // session — anonymous or real — already exists.
+  ensureAnonymousUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,9 +81,15 @@ export class InAppBrowserError extends Error {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  // firebaseUser is the raw Firebase session, which may be an anonymous user.
+  // The app-level `user` exposed below hides anonymous sessions (treats them as
+  // guests) so the rest of the app is unchanged; the anonymous token is still
+  // sent via getIdToken (which reads auth.currentUser directly).
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const firebaseEnabled = hasFirebaseConfig();
+
+  const user = firebaseUser && !firebaseUser.isAnonymous ? firebaseUser : null;
 
   const getIdToken = useCallback(
     async (options?: GetIdTokenOptions) => {
@@ -90,6 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [firebaseEnabled]
   );
+
+  const ensureAnonymousUser = useCallback(async () => {
+    if (!firebaseEnabled) return;
+    const auth = getFirebaseAuth();
+    if (auth.currentUser) return;
+    await signInAnonymously(auth);
+  }, [firebaseEnabled]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!firebaseEnabled) {
@@ -175,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const auth = getFirebaseAuth();
     const unsubscribe = onAuthStateChanged(auth, nextUser => {
-      setUser(nextUser);
+      setFirebaseUser(nextUser);
       setLoading(false);
     });
 
@@ -215,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isEmailLinkSignIn,
       signOut,
       getIdToken,
+      ensureAnonymousUser,
     }),
     [
       user,
@@ -225,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isEmailLinkSignIn,
       signOut,
       getIdToken,
+      ensureAnonymousUser,
     ]
   );
 

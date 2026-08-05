@@ -115,7 +115,9 @@ async function fetchWithAuth(
       code: string;
       tokensRemaining: number;
     };
-    err.code = 'INSUFFICIENT_TOKENS';
+    // Preserve the server's error code (e.g. FREE_TRIAL_USED vs
+    // INSUFFICIENT_TOKENS) so callers can branch on it.
+    err.code = data?.error?.code || 'INSUFFICIENT_TOKENS';
     err.tokensRemaining = data?.error?.tokensRemaining ?? 0;
     throw err;
   }
