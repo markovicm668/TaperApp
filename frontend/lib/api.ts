@@ -452,6 +452,21 @@ export async function fetchUserProfile(
   return res.json();
 }
 
+export type CreditPackId = 'small' | 'medium' | 'large';
+
+// Asks the backend to create a Lemon Squeezy checkout for a credit pack. The
+// backend owns the pack -> variant -> credits mapping; the returned URL is
+// opened in the lemon.js overlay (see lib/lemonsqueezy.ts). Credits are
+// granted by the payment webhook, never by this call.
+export async function createCheckout(packId: CreditPackId): Promise<{ url: string }> {
+  const res = await fetchWithAuth('/billing/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ packId }),
+  }, 'Failed to start checkout');
+  return res.json();
+}
+
 export async function addCredits(): Promise<{ tokensRemaining: number }> {
   const res = await fetchWithAuth('/user/me/add-credits', {
     method: 'POST',
@@ -525,7 +540,7 @@ export interface CreateApplicationPayload {
 
 export async function createApplication(
   payload: CreateApplicationPayload
-): Promise<{ id: string }> {
+): Promise<{ id: string; tokensRemaining?: number }> {
   const res = await fetchWithAuth(
     '/applications',
     {
@@ -536,7 +551,10 @@ export async function createApplication(
     'Failed to save application'
   );
   const json = await res.json();
-  return json.application as { id: string };
+  return {
+    ...(json.application as { id: string }),
+    ...(typeof json.tokensRemaining === 'number' ? { tokensRemaining: json.tokensRemaining } : {}),
+  };
 }
 
 export async function listApplications(): Promise<ApplicationSummary[]> {

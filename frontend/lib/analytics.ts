@@ -21,6 +21,8 @@ type AnalyticsEvent =
   | 'nav_referral_link_copied'
   | 'analysis_blocked_out_of_credits'
   | 'upsell_buy_credits_clicked'
+  | 'credits_purchase_completed'
+  | 'credits_purchase_failed'
   | 'nav_profile_menu_opened'
   | 'nav_profile_settings_clicked'
   | 'nav_signout_clicked'

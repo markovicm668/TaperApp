@@ -179,9 +179,14 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
             ? (err as { code: string }).code
             : undefined;
 
-        if (errorCode === 'FREE_TRIAL_USED') {
-          // Anonymous visitor has spent their one free analysis. Prompt signup.
-          track('analysis_failed', { source, reason: 'free_trial_used' });
+        if (errorCode === 'FREE_TRIAL_USED' || errorCode === 'FREE_TRIAL_IP_LIMIT') {
+          // Anonymous visitor has spent their one free analysis (or their
+          // network's trial window is exhausted). Prompt signup either way;
+          // the distinct codes exist for server-side observability.
+          track('analysis_failed', {
+            source,
+            reason: errorCode === 'FREE_TRIAL_USED' ? 'free_trial_used' : 'free_trial_ip_limit',
+          });
           markFreeAnalysisUsed();
           setParseDone(true);
           setIsAnalyzing(false);

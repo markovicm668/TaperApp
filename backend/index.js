@@ -10,11 +10,19 @@ const parsePdfRoute = require("./routes/parsePdf");
 const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
 const applicationsRoute = require("./routes/applications");
+const billingRoute = require("./routes/billing");
+const lemonWebhookRoute = require("./routes/lemonWebhook");
 const requireAuth = require("./middleware/requireAuth");
 const chargeAnalysis = require("./middleware/chargeAnalysis");
 const requireAnalyzeEligibility = require("./middleware/requireAnalyzeEligibility");
 
 const app = express();
+
+// Exactly one proxy hop (Fly's edge) is trusted, so req.ip resolves to the
+// real client address from the proxy-appended X-Forwarded-For entry — never a
+// client-supplied one. Without this, every visitor would share the proxy's
+// address and collectively exhaust the per-IP anonymous-trial limit.
+app.set("trust proxy", 1);
 
 // Minimal request logging
 app.use((req, res, next) => {
@@ -40,16 +48,30 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+// The Lemon Squeezy webhook must be mounted BEFORE the global express.json()
+// below: its HMAC signature is computed over the exact raw body bytes, so the
+// route needs req.body as an untouched Buffer. Any body-consuming middleware
+// added above this line would silently break signature verification.
+app.use(
+  "/webhooks/lemonsqueezy",
+  express.raw({ type: "*/*" }),
+  lemonWebhookRoute
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.use("/user/me", requireAuth, userRoute);
 // All three AI endpoints require a valid Firebase token (anonymous or real) so
 // a token-less request is rejected outright — this closes the "drop the header
-// for unlimited free analyses" exploit. chargeAnalysis is the only place a
-// token is deducted (real user) or a free trial consumed (anonymous user);
+// for unlimited free analyses" exploit. chargeAnalysis deducts a token (real
+// user) or consumes the free trial (anonymous user, additionally throttled per
+// client IP so minting fresh anon uids can't refill it);
 // requireAnalyzeEligibility is a read-only gate so a Gemini parse is never
-// burned on a request that could only 402 at /analyze anyway.
+// burned on a request that could only 402 at /analyze anyway. The other
+// billable moment is POST /applications: saving an anonymously-produced
+// analysis onto a real account costs a token after the account's first free
+// save (see routes/applications.js), closing the "analyze anonymously, sign
+// in to save for free" replay exploit.
 app.use("/analyze", requireAuth, chargeAnalysis(1), analyzeRoute);
 app.use("/parse", requireAuth, requireAnalyzeEligibility(1), parseRoute);
 app.use("/parse-pdf", requireAuth, requireAnalyzeEligibility(1), parsePdfRoute);
@@ -57,6 +79,9 @@ app.use("/parse-pdf", requireAuth, requireAnalyzeEligibility(1), parsePdfRoute);
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);
 app.use("/applications", requireAuth, applicationsRoute);
+// Anonymous users can't buy credits (the route 403s); purchases are granted by
+// the Lemon Squeezy webhook above, never by this route.
+app.use("/billing", requireAuth, billingRoute);
 
 // 404
 app.use((req, res) => {

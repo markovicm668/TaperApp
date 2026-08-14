@@ -164,6 +164,28 @@ Errors:
 - `CORS_ALLOWED_ORIGIN` (optional): comma-separated list of allowed frontend origins (default `http://localhost:3000`)
 - `PORT` (optional): defaults to `8080` (Cloud Run standard)
 - `ADMIN_EMAIL` (optional): email of the account allowed to call `POST /user/me/add-credits`; the route 403s for everyone if unset
+- `LEMONSQUEEZY_API_KEY` (required for purchases): Lemon Squeezy API key used to create checkouts
+- `LEMONSQUEEZY_STORE_ID` (required for purchases): Lemon Squeezy store id
+- `LEMONSQUEEZY_WEBHOOK_SECRET` (required for purchases): signing secret set on the Lemon Squeezy webhook
+- `LEMONSQUEEZY_VARIANT_ID_SMALL` / `LEMONSQUEEZY_VARIANT_ID_MEDIUM` / `LEMONSQUEEZY_VARIANT_ID_LARGE` (required for purchases): variant ids of the three credit-pack products
+  - Test mode and live mode have different API keys, webhook secrets, and variant ids — configure per environment. Missing values don't break the rest of the API; only `/billing/checkout` and the webhook fail.
+
+## Billing (Lemon Squeezy)
+
+Credit packs are sold as one-time Lemon Squeezy products.
+
+- `POST /billing/checkout` (auth required, anonymous users 403): body `{ "packId": "small" | "medium" | "large" }`, returns `{ "url": "<overlay checkout url>" }`. The pack → variant → credits mapping lives in `config/creditPacks.js`.
+- `POST /webhooks/lemonsqueezy`: Lemon Squeezy delivery endpoint (HMAC-verified over the raw body — the route is mounted before the global JSON parser in `index.js`, keep it there). `order_created` grants the pack's credits once per order id (dedup collection `lemonSqueezyOrders`); `order_refunded` revokes them.
+
+Dashboard setup: create a "Tailor Credits" product with three single-payment variants, an API key, and a webhook pointing at `https://<backend-host>/webhooks/lemonsqueezy` subscribed to `order_created` and `order_refunded`.
+
+Deploy secrets on Fly:
+
+```bash
+fly secrets set LEMONSQUEEZY_API_KEY=... LEMONSQUEEZY_STORE_ID=... \
+  LEMONSQUEEZY_WEBHOOK_SECRET=... LEMONSQUEEZY_VARIANT_ID_SMALL=... \
+  LEMONSQUEEZY_VARIANT_ID_MEDIUM=... LEMONSQUEEZY_VARIANT_ID_LARGE=...
+```
 
 ## Docker (Cloud Run ready)
 

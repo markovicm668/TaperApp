@@ -11,6 +11,7 @@ import { SmartSticky } from '@/components/results/smart-sticky';
 import { ScoreBreakdownPanel } from '@/components/results/score-breakdown';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { DownloadGateDialog } from '@/components/results/download-gate-dialog';
+import { OutOfCreditsDialog } from '@/components/out-of-credits-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -37,6 +38,7 @@ import {
 import { useResumeActions } from '@/lib/resume/store';
 import { useRemoteResumeSave } from '@/lib/resume/use-remote-save';
 import { useAuth } from '@/lib/auth/useAuth';
+import { useTokens } from '@/lib/tokens/TokenContext';
 import { incrementPeopleProperty, track } from '@/lib/analytics';
 import {
   buildPdfSelectionModel,
@@ -66,7 +68,9 @@ export default function ResultsPage() {
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
   const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
   const [gateOpen, setGateOpen] = useState(false);
+  const [saveBlockedOpen, setSaveBlockedOpen] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('classic');
+  const { tokensRemaining, setTokensRemaining } = useTokens();
 
   useEffect(() => {
     try {
@@ -99,7 +103,10 @@ export default function ResultsPage() {
 
   // Persist work tailored while anonymous once the user signs in (e.g. via the
   // download gate). The pending blob was stashed during analyze; flushing it
-  // here lands it in the History tab. Guarded so it POSTs at most once.
+  // here lands it in the History tab. Guarded so it POSTs at most once in
+  // flight. The save is billable server-side (free only for the account's
+  // first-ever save), so a 402 keeps the blob and reopens the attempt when the
+  // balance actually changes (tokensRemaining is in the dep array for that).
   const pendingFlushedRef = useRef(false);
   useEffect(() => {
     if (!user || pendingFlushedRef.current) return;
@@ -108,19 +115,28 @@ export default function ResultsPage() {
 
     pendingFlushedRef.current = true;
     createApplication(pending)
-      .then(({ id }) => {
+      .then(({ id, tokensRemaining: newBalance }) => {
         clearPendingApplication();
+        if (typeof newBalance === 'number') setTokensRemaining(newBalance);
         // Adopt the new application so edits made after signing in (or still
         // unsaved pre-signin edits) get auto-saved onto it.
         setApplicationId(id);
       })
       .catch(error => {
         // Non-fatal: the user still has their results on screen. Allow a retry
-        // on the next sign-in/render rather than dropping the work silently.
+        // rather than dropping the work silently.
         pendingFlushedRef.current = false;
+        const code = (error as { code?: string })?.code;
+        if (code === 'INSUFFICIENT_TOKENS') {
+          const balance = (error as { tokensRemaining?: number })?.tokensRemaining;
+          if (typeof balance === 'number') setTokensRemaining(balance);
+          toast.error('Saving this analysis needs 1 credit.');
+          setSaveBlockedOpen(true);
+          return;
+        }
         console.error('Failed to persist pre-signin application:', error);
       });
-  }, [setApplicationId, user]);
+  }, [setApplicationId, setTokensRemaining, tokensRemaining, user]);
 
   const resultsViewedRef = useRef(false);
   useEffect(() => {
@@ -437,6 +453,7 @@ export default function ResultsPage() {
       </div>
 
       <DownloadGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+      <OutOfCreditsDialog open={saveBlockedOpen} onOpenChange={setSaveBlockedOpen} />
 
       <ScoreBreakdownPanel scores={scores} />
 

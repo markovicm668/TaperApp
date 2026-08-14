@@ -8,7 +8,10 @@ const { createRequireAuth } = require("../middleware/requireAuth");
 
 // requireAnalyzeEligibility is read-only: it must NOT mutate balances or the
 // trial. These tests assert it gates correctly and leaves state untouched.
-async function withServer({ balances = {}, usedTrials = new Set() }, run) {
+async function withServer(
+  { balances = {}, usedTrials = new Set(), blockedIpHashes = new Set(), ipHash = "ip-hash-1" },
+  run
+) {
   const app = express();
   app.use(express.json());
 
@@ -25,12 +28,22 @@ async function withServer({ balances = {}, usedTrials = new Set() }, run) {
   });
 
   const getTokensRemaining = async (uid) => balances[uid] ?? 0;
-  const isFreeTrialAvailable = async (uid) => !usedTrials.has(uid);
+  const isFreeTrialAvailable = async (uid, hash) => {
+    if (usedTrials.has(uid)) return { available: false, reason: "FREE_TRIAL_USED" };
+    if (hash !== null && blockedIpHashes.has(hash)) {
+      return { available: false, reason: "FREE_TRIAL_IP_LIMIT" };
+    }
+    return { available: true };
+  };
 
   app.use(
     "/parse",
     requireAuth,
-    requireAnalyzeEligibility(1, { getTokensRemaining, isFreeTrialAvailable }),
+    requireAnalyzeEligibility(1, {
+      getTokensRemaining,
+      isFreeTrialAvailable,
+      getClientIpHash: () => ipHash,
+    }),
     (req, res) => res.status(200).json({ ok: true })
   );
 
@@ -71,6 +84,14 @@ test("anonymous whose trial is used gets 402 FREE_TRIAL_USED", { concurrency: fa
     const res = await post(baseUrl, "anon-token");
     assert.equal(res.status, 402);
     assert.equal((await res.json()).error.code, "FREE_TRIAL_USED");
+  });
+});
+
+test("anonymous from an IP-limited network gets 402 FREE_TRIAL_IP_LIMIT", { concurrency: false }, async () => {
+  await withServer({ blockedIpHashes: new Set(["ip-hash-1"]) }, async (baseUrl) => {
+    const res = await post(baseUrl, "anon-token");
+    assert.equal(res.status, 402);
+    assert.equal((await res.json()).error.code, "FREE_TRIAL_IP_LIMIT");
   });
 });
 

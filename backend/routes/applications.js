@@ -1,7 +1,16 @@
 const express = require("express");
 const applicationService = require("../services/applicationService");
+const {
+  chargeApplicationSave: realChargeApplicationSave,
+  refundApplicationSave: realRefundApplicationSave,
+} = require("../services/tokenService");
+const { isAnonymousRequest } = require("../utils/authClaims");
 
-function createApplicationsRouter({ service = applicationService } = {}) {
+function createApplicationsRouter({
+  service = applicationService,
+  chargeSave = realChargeApplicationSave,
+  refundSave = realRefundApplicationSave,
+} = {}) {
   const router = express.Router();
 
   // All routes assume requireAuth ran upstream (mounted in index.js),
@@ -22,6 +31,9 @@ function createApplicationsRouter({ service = applicationService } = {}) {
   // Persist a pre-computed analysis as a tracked application. Used to save the
   // work an anonymous user tailored before signing in, without re-running the
   // (paid) analysis. Authenticated analyses are saved inline by /analyze.
+  // Since the analysis itself was produced on a free anonymous trial, the save
+  // is the billable moment: 1 token, except the account's first save ever
+  // (freeSaveUsed), which keeps the honest try-then-sign-up funnel free.
   router.post("/", async (req, res) => {
     try {
       const { company, targetRole, jobDescription, matchScore, scores, analysis, parsed } =
@@ -33,16 +45,52 @@ function createApplicationsRouter({ service = applicationService } = {}) {
         });
       }
 
-      const created = await service.createApplication(req.auth.uid, {
-        company,
-        targetRole,
-        jobDescription,
-        matchScore,
-        scores,
-        analysis,
-        parsed,
+      if (isAnonymousRequest(req)) {
+        return res.status(403).json({
+          error: { code: "ANONYMOUS_FORBIDDEN", message: "Sign in to save an analysis." },
+        });
+      }
+
+      let chargeResult;
+      try {
+        chargeResult = await chargeSave(req.auth.uid);
+      } catch (err) {
+        if (err.code === "INSUFFICIENT_TOKENS") {
+          return res.status(402).json({
+            error: {
+              code: "INSUFFICIENT_TOKENS",
+              message: err.message,
+              tokensRemaining: err.tokensRemaining,
+            },
+          });
+        }
+        throw err;
+      }
+
+      let created;
+      try {
+        created = await service.createApplication(req.auth.uid, {
+          company,
+          targetRole,
+          jobDescription,
+          matchScore,
+          scores,
+          analysis,
+          parsed,
+        });
+      } catch (err) {
+        try {
+          await refundSave(req.auth.uid, chargeResult);
+        } catch (refundErr) {
+          console.error("-> Save refund failed (charge without application):", refundErr);
+        }
+        throw err;
+      }
+
+      return res.status(201).json({
+        application: { id: created.id },
+        tokensRemaining: chargeResult.tokensRemaining,
       });
-      return res.status(201).json({ application: { id: created.id } });
     } catch (err) {
       console.error("-> Create application error:", err);
       return res.status(500).json({

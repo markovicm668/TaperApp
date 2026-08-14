@@ -53,26 +53,87 @@ function createFakeService(seed = {}) {
   };
 }
 
-async function withServer(service, uid, run) {
+// In-memory stand-in for tokenService.chargeApplicationSave/refundApplicationSave.
+// Mirrors the contract: first save per uid is free (freeSaveUsed flag), then
+// 1 token per save; throws INSUFFICIENT_TOKENS at zero balance.
+function createFakeCharge({ balances = {}, freeSaveUsed = new Set() } = {}) {
+  const calls = [];
+  const refunds = [];
+  return {
+    balances,
+    freeSaveUsed,
+    calls,
+    refunds,
+    async chargeSave(uid) {
+      calls.push(uid);
+      if (!freeSaveUsed.has(uid)) {
+        freeSaveUsed.add(uid);
+        return { charged: false, tokensRemaining: balances[uid] ?? 0 };
+      }
+      const current = balances[uid] ?? 0;
+      if (current < 1) {
+        const err = new Error(`Insufficient tokens. Required: 1, available: ${current}.`);
+        err.code = 'INSUFFICIENT_TOKENS';
+        err.tokensRemaining = current;
+        throw err;
+      }
+      balances[uid] = current - 1;
+      return { charged: true, tokensRemaining: balances[uid] };
+    },
+    async refundSave(uid, { charged }) {
+      refunds.push({ uid, charged });
+      if (charged) balances[uid] = (balances[uid] ?? 0) + 1;
+      else freeSaveUsed.delete(uid);
+    },
+  };
+}
+
+async function withServer(service, uid, run, { signInProvider = 'google.com', charge } = {}) {
   const app = express();
   app.use(express.json());
+  const fakeCharge = charge ?? createFakeCharge();
   // Stands in for the requireAuth middleware applied at mount time in index.js.
   app.use((req, res, next) => {
-    req.auth = { uid };
+    req.auth = { uid, firebase: { sign_in_provider: signInProvider } };
     next();
   });
-  app.use('/applications', createApplicationsRouter({ service }));
+  app.use(
+    '/applications',
+    createApplicationsRouter({
+      service,
+      chargeSave: fakeCharge.chargeSave,
+      refundSave: fakeCharge.refundSave,
+    })
+  );
 
   const server = app.listen(0);
   await once(server, 'listening');
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
-    await run(baseUrl);
+    await run(baseUrl, fakeCharge);
   } finally {
     server.close();
     await once(server, 'close');
   }
+}
+
+const VALID_POST_BODY = {
+  company: 'Acme',
+  targetRole: 'BDR',
+  jobDescription: 'JD',
+  matchScore: 72,
+  scores: null,
+  analysis: { meta: { matchScore: 72 } },
+  parsed: { resumeData: {} },
+};
+
+function postApplication(baseUrl, body = VALID_POST_BODY) {
+  return fetch(`${baseUrl}/applications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 const SEED = {
@@ -96,19 +157,7 @@ test('POST /applications creates an owned application and returns its id', { con
   const service = createFakeService();
 
   await withServer(service, 'user-a', async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/applications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        company: 'Acme',
-        targetRole: 'BDR',
-        jobDescription: 'JD',
-        matchScore: 72,
-        scores: null,
-        analysis: { meta: { matchScore: 72 } },
-        parsed: { resumeData: {} },
-      }),
-    });
+    const response = await postApplication(baseUrl);
     assert.equal(response.status, 201);
     const id = (await response.json()).application.id;
 
@@ -120,17 +169,77 @@ test('POST /applications creates an owned application and returns its id', { con
 
 test('POST /applications returns 400 when analysis or parsed is missing', { concurrency: false }, async () => {
   const service = createFakeService();
+  const charge = createFakeCharge();
 
   await withServer(service, 'user-a', async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/applications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: 'Acme', targetRole: 'BDR' }),
-    });
+    const response = await postApplication(baseUrl, { company: 'Acme', targetRole: 'BDR' });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, 'INVALID_INPUT');
     assert.equal(service.store.size, 0);
-  });
+    // Invalid input must never reach the charge.
+    assert.equal(charge.calls.length, 0);
+  }, { charge });
+});
+
+test('POST /applications rejects anonymous tokens with 403 and never charges', { concurrency: false }, async () => {
+  const service = createFakeService();
+  const charge = createFakeCharge();
+
+  await withServer(service, 'anon-1', async (baseUrl) => {
+    const response = await postApplication(baseUrl);
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'ANONYMOUS_FORBIDDEN');
+    assert.equal(service.store.size, 0);
+    assert.equal(charge.calls.length, 0);
+  }, { signInProvider: 'anonymous', charge });
+});
+
+test('POST /applications: first save is free (flag set), second save costs a token', { concurrency: false }, async () => {
+  const service = createFakeService();
+  const charge = createFakeCharge({ balances: { 'user-a': 5 } });
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const first = await postApplication(baseUrl);
+    assert.equal(first.status, 201);
+    assert.equal((await first.json()).tokensRemaining, 5);
+    assert.equal(charge.freeSaveUsed.has('user-a'), true);
+    assert.equal(charge.balances['user-a'], 5);
+
+    const second = await postApplication(baseUrl);
+    assert.equal(second.status, 201);
+    assert.equal((await second.json()).tokensRemaining, 4);
+    assert.equal(charge.balances['user-a'], 4);
+  }, { charge });
+});
+
+test('POST /applications with used free save and zero balance is 402, nothing stored', { concurrency: false }, async () => {
+  const service = createFakeService();
+  const charge = createFakeCharge({ balances: { 'user-a': 0 }, freeSaveUsed: new Set(['user-a']) });
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const response = await postApplication(baseUrl);
+    assert.equal(response.status, 402);
+    const body = await response.json();
+    assert.equal(body.error.code, 'INSUFFICIENT_TOKENS');
+    assert.equal(body.error.tokensRemaining, 0);
+    assert.equal(service.store.size, 0);
+  }, { charge });
+});
+
+test('POST /applications refunds the charge when the application write fails', { concurrency: false }, async () => {
+  const service = createFakeService();
+  service.createApplication = async () => {
+    throw new Error('firestore down');
+  };
+  const charge = createFakeCharge({ balances: { 'user-a': 3 }, freeSaveUsed: new Set(['user-a']) });
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const response = await postApplication(baseUrl);
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).error.code, 'APPLICATION_CREATE_FAILED');
+    assert.deepEqual(charge.refunds, [{ uid: 'user-a', charged: true }]);
+    assert.equal(charge.balances['user-a'], 3);
+  }, { charge });
 });
 
 test('GET /applications/:id returns 404 for another user\'s application', { concurrency: false }, async () => {

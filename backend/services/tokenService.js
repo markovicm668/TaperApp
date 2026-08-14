@@ -75,6 +75,62 @@ async function getTokensRemaining(uid) {
   return snap.exists ? snap.data().tokensRemaining : INITIAL_TOKENS;
 }
 
+// Charges saving a pre-computed (anonymously produced) analysis via
+// POST /applications. The first such save per account is free — tracked by the
+// freeSaveUsed flag — so the honest "try free → sign up → keep your analysis"
+// funnel costs nothing exactly once; every later save costs 1 token.
+async function chargeApplicationSave(uid) {
+  const db = getFirebaseFirestore();
+  const userRef = getUserRef(uid);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+
+    if (!snap.exists) {
+      // The replay POST can beat /user/me's ensureUser for brand-new accounts;
+      // mint the same doc shape it would, with the free save consumed.
+      tx.set(userRef, {
+        tokensRemaining: INITIAL_TOKENS,
+        referralCode: generateReferralCode(),
+        referredBy: null,
+        createdAt: FieldValue.serverTimestamp(),
+        freeSaveUsed: true,
+      });
+      return { charged: false, tokensRemaining: INITIAL_TOKENS };
+    }
+
+    const data = snap.data();
+    if (!data.freeSaveUsed) {
+      tx.update(userRef, { freeSaveUsed: true });
+      return { charged: false, tokensRemaining: data.tokensRemaining };
+    }
+
+    if (data.tokensRemaining < 1) {
+      const err = new Error(
+        `Insufficient tokens. Required: 1, available: ${data.tokensRemaining}.`
+      );
+      err.code = "INSUFFICIENT_TOKENS";
+      err.tokensRemaining = data.tokensRemaining;
+      throw err;
+    }
+
+    const newBalance = data.tokensRemaining - 1;
+    tx.update(userRef, { tokensRemaining: newBalance });
+    return { charged: true, tokensRemaining: newBalance };
+  });
+}
+
+// Best-effort compensation when the application write fails after a
+// successful chargeApplicationSave.
+async function refundApplicationSave(uid, { charged }) {
+  const userRef = getUserRef(uid);
+  if (charged) {
+    await userRef.update({ tokensRemaining: FieldValue.increment(1) });
+  } else {
+    await userRef.update({ freeSaveUsed: false });
+  }
+}
+
 async function addTokens(uid, amount) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
@@ -102,4 +158,8 @@ module.exports = {
   deductTokens,
   addTokens,
   getTokensRemaining,
+  chargeApplicationSave,
+  refundApplicationSave,
+  INITIAL_TOKENS,
+  USERS_COLLECTION,
 };
