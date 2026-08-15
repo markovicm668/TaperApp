@@ -44,6 +44,7 @@ type AnalyticsEvent =
   | 'resume_export_failed'
   | 'resume_template_changed'
   | 'guest_download_blocked'
+  | 'unpaid_download_blocked'
   | 'tracker_viewed'
   | 'tracker_application_opened'
   | 'tracker_stage_changed'

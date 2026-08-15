@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Lock, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DiffView } from '@/components/results/diff-view';
@@ -28,6 +28,7 @@ import {
 import { useResumePreview } from '@/lib/resume/use-resume-preview';
 import type { ResumePdfPayload, ResumeTemplateId } from '@/lib/types';
 import {
+  useApplicationId,
   useBulletChanges,
   useCanonicalParsePayload,
   useExportPayload,
@@ -68,9 +69,14 @@ export default function ResultsPage() {
   const [pdfSelectionOverrides, setPdfSelectionOverrides] = useState<PdfSelectionOverrides>({});
   const [mobileTab, setMobileTab] = useState<'diff' | 'preview'>('diff');
   const [gateOpen, setGateOpen] = useState(false);
+  // saveBlocked locks the whole results view for a signed-in user whose
+  // pending (anonymously produced) analysis couldn't be paid for;
+  // saveBlockedOpen controls the get-credits dialog shown on top of the lock.
+  const [saveBlocked, setSaveBlocked] = useState(false);
   const [saveBlockedOpen, setSaveBlockedOpen] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('classic');
   const { tokensRemaining, setTokensRemaining } = useTokens();
+  const applicationId = useApplicationId();
 
   useEffect(() => {
     try {
@@ -118,19 +124,23 @@ export default function ResultsPage() {
       .then(({ id, tokensRemaining: newBalance }) => {
         clearPendingApplication();
         if (typeof newBalance === 'number') setTokensRemaining(newBalance);
+        setSaveBlocked(false);
+        setSaveBlockedOpen(false);
         // Adopt the new application so edits made after signing in (or still
         // unsaved pre-signin edits) get auto-saved onto it.
         setApplicationId(id);
       })
       .catch(error => {
-        // Non-fatal: the user still has their results on screen. Allow a retry
-        // rather than dropping the work silently.
+        // Non-fatal: the pending work stays in sessionStorage for a retry.
         pendingFlushedRef.current = false;
         const code = (error as { code?: string })?.code;
         if (code === 'INSUFFICIENT_TOKENS') {
           const balance = (error as { tokensRemaining?: number })?.tokensRemaining;
           if (typeof balance === 'number') setTokensRemaining(balance);
-          toast.error('Saving this analysis needs 1 credit.');
+          // Lock the results until the account can cover the save; the effect
+          // re-fires when tokensRemaining changes (credits bought or earned),
+          // so the lock resolves itself once the balance moves.
+          setSaveBlocked(true);
           setSaveBlockedOpen(true);
           return;
         }
@@ -239,6 +249,16 @@ export default function ResultsPage() {
       return;
     }
 
+    // The server only renders PDFs for an owned application (the billed
+    // artifact). No applicationId means the pending save couldn't be paid —
+    // show the credits lock instead of a doomed request.
+    if (!applicationId) {
+      track('unpaid_download_blocked', { trigger: 'export' });
+      setSaveBlocked(true);
+      setSaveBlockedOpen(true);
+      return;
+    }
+
     const isIOS =
       /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -251,7 +271,7 @@ export default function ResultsPage() {
         pdfSelectionModel
           ? filterResumePdfPayloadForSelection(exportResumePayload, pdfSelectionModel, pdfSelectionOverrides)
           : exportResumePayload;
-      const blob = await exportResumePdf(payloadForExport, pdfTemplate);
+      const blob = await exportResumePdf(payloadForExport, pdfTemplate, applicationId);
       const nameSlug = (payloadForExport.basics?.name || 'resume').replace(/\s+/g, '_');
       const titleSlug = (exportResumePayload.basics?.title || exportResumePayload.basics?.label || targetRole || '')
         .replace(/\s+/g, '_');
@@ -291,6 +311,13 @@ export default function ResultsPage() {
       router.push('/history');
     } catch (error) {
       iosWindowRef?.close();
+      const code = (error as { code?: string })?.code;
+      if (code === 'APPLICATION_REQUIRED' || code === 'INSUFFICIENT_TOKENS') {
+        // Server-side confirmation that this work isn't paid for yet.
+        setSaveBlocked(true);
+        setSaveBlockedOpen(true);
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Unknown error.';
       track('resume_export_failed', { error: message });
       toast.error('PDF export failed', { description: message });
@@ -389,6 +416,34 @@ export default function ResultsPage() {
 
   const preview = useResumePreview(previewPayload, pdfTemplate);
 
+  // A signed-in account that couldn't cover the save of its anonymously
+  // produced analysis sees a locked screen instead of the results until it
+  // has a credit. The pending work stays in sessionStorage; once credits
+  // arrive (invite reward or purchase), the replay effect saves it and the
+  // lock clears on its own. Placed after every hook call — saveBlocked flips
+  // mid-lifecycle, so an earlier return would change the hook count between
+  // renders.
+  if (user && saveBlocked) {
+    return (
+      <>
+        <div className="mx-auto flex h-full min-h-[520px] w-full max-w-[720px] flex-col items-center justify-center rounded-2xl border border-border/85 bg-card/90 p-8 text-center shadow-[0_1px_1px_rgba(15,23,42,0.05),0_10px_28px_rgba(15,23,42,0.04)]">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <Lock className="h-6 w-6 text-primary" />
+          </div>
+          <h1 className="mt-5 font-serif text-3xl font-semibold">Your tailored resume is ready</h1>
+          <p className="mt-3 max-w-[440px] text-muted-foreground">
+            You need 1 credit to unlock, edit and download it. Invite a friend to earn free
+            credits, or buy a credit pack — your work is kept safe meanwhile.
+          </p>
+          <Button className="mt-8" onClick={() => setSaveBlockedOpen(true)}>
+            Get credits
+          </Button>
+        </div>
+        <OutOfCreditsDialog open={saveBlockedOpen} onOpenChange={setSaveBlockedOpen} />
+      </>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1340px]">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -453,7 +508,6 @@ export default function ResultsPage() {
       </div>
 
       <DownloadGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-      <OutOfCreditsDialog open={saveBlockedOpen} onOpenChange={setSaveBlockedOpen} />
 
       <ScoreBreakdownPanel scores={scores} />
 

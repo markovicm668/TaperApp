@@ -24,6 +24,9 @@ export const selectResumeData = (state: ResumeStoreState): ResumeDataV2 =>
 
 export const selectBulletChanges = (state: ResumeStoreState) => state.workspace.analysis.bulletChanges;
 
+export const selectApplicationId = (state: ResumeStoreState): string | null =>
+  state.workspace.analysis.applicationId ?? null;
+
 export const selectCurrentResultId = (state: ResumeStoreState): string | null =>
   state.workspace.analysis.resultId || state.workspace.analysis.lastAnalysisResult?.id || null;
 
@@ -97,6 +100,10 @@ export function useBulletChanges() {
 
 export function useCurrentResultId(): string | null {
   return useResumeSelector(selectCurrentResultId);
+}
+
+export function useApplicationId(): string | null {
+  return useResumeSelector(selectApplicationId);
 }
 
 export function useHasResults(): boolean {

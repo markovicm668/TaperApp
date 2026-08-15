@@ -512,12 +512,15 @@ export async function fetchResumePreviewHtml(
 
 export async function exportResumePdf(
   resume: ResumePdfPayload,
-  template?: ResumeTemplateId
+  template: ResumeTemplateId | undefined,
+  // The server only renders PDFs for an application the caller owns — the
+  // paid deliverable must tie back to a billed (or first-save-free) analysis.
+  applicationId: string
 ): Promise<Blob> {
   const res = await fetchWithAuth('/export/pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume, ...(template ? { template } : {}) }),
+    body: JSON.stringify({ resume, applicationId, ...(template ? { template } : {}) }),
   }, 'PDF export failed');
 
   return res.blob();
