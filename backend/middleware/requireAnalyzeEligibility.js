@@ -1,4 +1,4 @@
-const { getTokensRemaining: realGetTokensRemaining } = require("../services/tokenService");
+const { getUserAccess: realGetUserAccess } = require("../services/entitlementService");
 const { isFreeTrialAvailable: realIsFreeTrialAvailable } = require("../services/freeTrialService");
 const { getClientIpHash: realGetClientIpHash } = require("../utils/clientIp");
 const { isAnonymousRequest } = require("../utils/authClaims");
@@ -14,12 +14,12 @@ const TRIAL_DENIED_MESSAGES = {
 // afford the follow-up /analyze anyway, so a real Gemini parse is never burned
 // on a request that can only 402. Anonymous users pass while their one free
 // trial is unused and their network's trial window has room; real users pass
-// with a positive balance. The actual charge happens later, once, in
-// chargeAnalysis on /analyze. Dependencies are injectable for testing.
+// with an active plan or a positive balance. The actual charge happens later,
+// once, in chargeAnalysis on /analyze. Dependencies are injectable for testing.
 function requireAnalyzeEligibility(
   cost,
   {
-    getTokensRemaining = realGetTokensRemaining,
+    getUserAccess = realGetUserAccess,
     isFreeTrialAvailable = realIsFreeTrialAvailable,
     getClientIpHash = realGetClientIpHash,
   } = {}
@@ -39,13 +39,14 @@ function requireAnalyzeEligibility(
         return next();
       }
 
-      const balance = await getTokensRemaining(req.auth.uid);
-      if (balance < cost) {
+      const access = await getUserAccess(req.auth.uid);
+      if (access.entitled) return next();
+      if (access.tokensRemaining < cost) {
         return res.status(402).json({
           error: {
             code: "INSUFFICIENT_TOKENS",
-            message: `Insufficient tokens. Required: ${cost}, available: ${balance}.`,
-            tokensRemaining: balance,
+            message: `Insufficient tokens. Required: ${cost}, available: ${access.tokensRemaining}.`,
+            tokensRemaining: access.tokensRemaining,
           },
         });
       }

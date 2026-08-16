@@ -1,6 +1,6 @@
 const { getEnv } = require("../config/env");
 
-const API_URL = "https://api.lemonsqueezy.com/v1/checkouts";
+const API_BASE = "https://api.lemonsqueezy.com/v1";
 
 // Env is read inside each call (not at module load) so requiring this module
 // without Lemon Squeezy configured — as tests and unrelated local dev do —
@@ -43,7 +43,7 @@ function createLemonSqueezyService({ fetchImpl = fetch, env = null } = {}) {
       },
     };
 
-    const response = await fetchImpl(API_URL, {
+    const response = await fetchImpl(`${API_BASE}/checkouts`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -68,7 +68,42 @@ function createLemonSqueezyService({ fetchImpl = fetch, env = null } = {}) {
     return { url: json.data.attributes.url };
   }
 
-  return { createCheckout };
+  // Fetches a subscription; used by GET /billing/portal because
+  // urls.customer_portal is a signed, EXPIRING URL — it must be fetched fresh
+  // per click, never stored.
+  async function getSubscription(subscriptionId) {
+    const apiKey = readEnv("LEMONSQUEEZY_API_KEY");
+
+    const response = await fetchImpl(
+      `${API_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/vnd.api+json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error(
+        `-> Lemon Squeezy subscription fetch failed (${response.status}):`,
+        detail
+      );
+      const err = new Error(`Lemon Squeezy API error (${response.status}).`);
+      err.code = "LEMONSQUEEZY_API_ERROR";
+      throw err;
+    }
+
+    const json = await response.json();
+    const attrs = json.data.attributes;
+    return {
+      status: attrs.status,
+      customerPortalUrl: attrs.urls?.customer_portal ?? null,
+    };
+  }
+
+  return { createCheckout, getSubscription };
 }
 
 module.exports = createLemonSqueezyService();

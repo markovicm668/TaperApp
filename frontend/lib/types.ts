@@ -10,7 +10,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   creditsRemaining: number;
-  plan: 'free' | 'pro' | 'enterprise';
+  plan: 'free' | 'weekly' | 'monthly' | 'lifetime';
 }
 
 export interface ResumeInput {

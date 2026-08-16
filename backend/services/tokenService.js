@@ -1,6 +1,7 @@
 const { getFirebaseFirestore } = require("./firebaseAdmin");
 const { FieldValue } = require("firebase-admin/firestore");
 const { generateReferralCode } = require("./referralService");
+const { computeEntitlement } = require("./entitlementService");
 
 const INITIAL_TOKENS = 5;
 const USERS_COLLECTION = "users";
@@ -36,7 +37,10 @@ async function ensureUser(uid) {
   });
 }
 
-async function deductTokens(uid, cost) {
+// Charges an analysis. Users on an active plan (see entitlementService) are
+// not debited — their balance is returned untouched. One transaction, one
+// read serving both the plan check and the balance.
+async function chargeAnalysisTokens(uid, cost) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
 
@@ -55,6 +59,14 @@ async function deductTokens(uid, cost) {
       data = snap.data();
     }
 
+    if (computeEntitlement(data).entitled) {
+      return {
+        entitled: true,
+        charged: false,
+        tokensRemaining: data.tokensRemaining,
+      };
+    }
+
     if (data.tokensRemaining < cost) {
       const err = new Error(
         `Insufficient tokens. Required: ${cost}, available: ${data.tokensRemaining}.`
@@ -66,7 +78,7 @@ async function deductTokens(uid, cost) {
 
     const newBalance = data.tokensRemaining - cost;
     tx.update(userRef, { tokensRemaining: newBalance });
-    return newBalance;
+    return { entitled: false, charged: true, tokensRemaining: newBalance };
   });
 }
 
@@ -96,13 +108,24 @@ async function chargeApplicationSave(uid) {
         createdAt: FieldValue.serverTimestamp(),
         freeSaveUsed: true,
       });
-      return { charged: false, tokensRemaining: INITIAL_TOKENS };
+      return { charged: false, entitled: false, tokensRemaining: INITIAL_TOKENS };
     }
 
     const data = snap.data();
+
+    // Entitled saves are free and must NOT consume freeSaveUsed — if the plan
+    // later lapses, the account's one free save is still available.
+    if (computeEntitlement(data).entitled) {
+      return {
+        charged: false,
+        entitled: true,
+        tokensRemaining: data.tokensRemaining,
+      };
+    }
+
     if (!data.freeSaveUsed) {
       tx.update(userRef, { freeSaveUsed: true });
-      return { charged: false, tokensRemaining: data.tokensRemaining };
+      return { charged: false, entitled: false, tokensRemaining: data.tokensRemaining };
     }
 
     if (data.tokensRemaining < 1) {
@@ -116,13 +139,16 @@ async function chargeApplicationSave(uid) {
 
     const newBalance = data.tokensRemaining - 1;
     tx.update(userRef, { tokensRemaining: newBalance });
-    return { charged: true, tokensRemaining: newBalance };
+    return { charged: true, entitled: false, tokensRemaining: newBalance };
   });
 }
 
 // Best-effort compensation when the application write fails after a
 // successful chargeApplicationSave.
-async function refundApplicationSave(uid, { charged }) {
+async function refundApplicationSave(uid, { charged, entitled }) {
+  // An entitled save charged nothing and consumed nothing — in particular it
+  // did NOT use freeSaveUsed, so the else branch below must not re-gift it.
+  if (entitled) return;
   const userRef = getUserRef(uid);
   if (charged) {
     await userRef.update({ tokensRemaining: FieldValue.increment(1) });
@@ -155,7 +181,7 @@ async function addTokens(uid, amount) {
 
 module.exports = {
   ensureUser,
-  deductTokens,
+  chargeAnalysisTokens,
   addTokens,
   getTokensRemaining,
   chargeApplicationSave,

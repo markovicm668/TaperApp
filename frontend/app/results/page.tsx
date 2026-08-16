@@ -11,7 +11,7 @@ import { SmartSticky } from '@/components/results/smart-sticky';
 import { ScoreBreakdownPanel } from '@/components/results/score-breakdown';
 import { SectionOrderDialog } from '@/components/results/section-order-dialog';
 import { DownloadGateDialog } from '@/components/results/download-gate-dialog';
-import { OutOfCreditsDialog } from '@/components/out-of-credits-dialog';
+import { UpgradePlansDialog } from '@/components/upgrade-plans-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -75,7 +75,7 @@ export default function ResultsPage() {
   const [saveBlocked, setSaveBlocked] = useState(false);
   const [saveBlockedOpen, setSaveBlockedOpen] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState<ResumeTemplateId>('classic');
-  const { tokensRemaining, setTokensRemaining } = useTokens();
+  const { tokensRemaining, entitled, setTokensRemaining } = useTokens();
   const applicationId = useApplicationId();
 
   useEffect(() => {
@@ -146,7 +146,7 @@ export default function ResultsPage() {
         }
         console.error('Failed to persist pre-signin application:', error);
       });
-  }, [setApplicationId, setTokensRemaining, tokensRemaining, user]);
+  }, [setApplicationId, setTokensRemaining, tokensRemaining, entitled, user]);
 
   const resultsViewedRef = useRef(false);
   useEffect(() => {
@@ -432,14 +432,21 @@ export default function ResultsPage() {
           </div>
           <h1 className="mt-5 font-serif text-3xl font-semibold">Your tailored resume is ready</h1>
           <p className="mt-3 max-w-[440px] text-muted-foreground">
-            You need 1 credit to unlock, edit and download it. Invite a friend to earn free
-            credits, or buy a credit pack — your work is kept safe meanwhile.
+            Upgrade for unlimited access to unlock, edit and download it. Invite a friend to earn
+            free credits — your work is kept safe meanwhile.
           </p>
           <Button className="mt-8" onClick={() => setSaveBlockedOpen(true)}>
-            Get credits
+            Unlock
           </Button>
         </div>
-        <OutOfCreditsDialog open={saveBlockedOpen} onOpenChange={setSaveBlockedOpen} />
+        <UpgradePlansDialog
+          open={saveBlockedOpen}
+          onOpenChange={setSaveBlockedOpen}
+          source="results_lock"
+          showInvitePanel
+          title="Unlock your resume"
+          description="Upgrade for unlimited access, or invite a friend for free credits."
+        />
       </>
     );
   }

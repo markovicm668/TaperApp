@@ -9,7 +9,13 @@ const { createRequireAuth } = require("../middleware/requireAuth");
 // requireAnalyzeEligibility is read-only: it must NOT mutate balances or the
 // trial. These tests assert it gates correctly and leaves state untouched.
 async function withServer(
-  { balances = {}, usedTrials = new Set(), blockedIpHashes = new Set(), ipHash = "ip-hash-1" },
+  {
+    balances = {},
+    entitledUids = new Set(),
+    usedTrials = new Set(),
+    blockedIpHashes = new Set(),
+    ipHash = "ip-hash-1",
+  },
   run
 ) {
   const app = express();
@@ -27,7 +33,10 @@ async function withServer(
     },
   });
 
-  const getTokensRemaining = async (uid) => balances[uid] ?? 0;
+  const getUserAccess = async (uid) => ({
+    entitled: entitledUids.has(uid),
+    tokensRemaining: balances[uid] ?? 0,
+  });
   const isFreeTrialAvailable = async (uid, hash) => {
     if (usedTrials.has(uid)) return { available: false, reason: "FREE_TRIAL_USED" };
     if (hash !== null && blockedIpHashes.has(hash)) {
@@ -40,7 +49,7 @@ async function withServer(
     "/parse",
     requireAuth,
     requireAnalyzeEligibility(1, {
-      getTokensRemaining,
+      getUserAccess,
       isFreeTrialAvailable,
       getClientIpHash: () => ipHash,
     }),
@@ -109,4 +118,13 @@ test("real user at zero balance gets 402 INSUFFICIENT_TOKENS", { concurrency: fa
     assert.equal(res.status, 402);
     assert.equal((await res.json()).error.code, "INSUFFICIENT_TOKENS");
   });
+});
+
+test("entitled user at zero balance passes", { concurrency: false }, async () => {
+  await withServer(
+    { balances: { "real-1": 0 }, entitledUids: new Set(["real-1"]) },
+    async (baseUrl) => {
+      assert.equal((await post(baseUrl, "real-token")).status, 200);
+    }
+  );
 });

@@ -7,11 +7,19 @@ const chargeAnalysis = require("../middleware/chargeAnalysis");
 const { createRequireAuth } = require("../middleware/requireAuth");
 
 // Builds a server: requireAuth (fake verify) -> chargeAnalysis(fake deps) -> ok.
-// Tokens are simulated by an in-memory balances map; the free trial by a set of
-// uids that have already used it plus a per-ipHash consumption counter. Any
-// bearer token of the form "anon:<uid>" authenticates as that anonymous uid.
+// Tokens are simulated by an in-memory balances map (uids in `entitledUids`
+// have an active plan and are never charged); the free trial by a set of uids
+// that have already used it plus a per-ipHash consumption counter. Any bearer
+// token of the form "anon:<uid>" authenticates as that anonymous uid.
 async function withServer(
-  { balances = {}, usedTrials = new Set(), ipCounts = {}, ipHash = "ip-hash-1", ipLimit = 2 },
+  {
+    balances = {},
+    entitledUids = new Set(),
+    usedTrials = new Set(),
+    ipCounts = {},
+    ipHash = "ip-hash-1",
+    ipLimit = 2,
+  },
   run
 ) {
   const app = express();
@@ -32,8 +40,11 @@ async function withServer(
     },
   });
 
-  const deductTokens = async (uid, cost) => {
+  const chargeTokens = async (uid, cost) => {
     const current = balances[uid] ?? 0;
+    if (entitledUids.has(uid)) {
+      return { entitled: true, charged: false, tokensRemaining: current };
+    }
     if (current < cost) {
       const err = new Error(`Insufficient tokens. Required: ${cost}, available: ${current}.`);
       err.code = "INSUFFICIENT_TOKENS";
@@ -41,7 +52,7 @@ async function withServer(
       throw err;
     }
     balances[uid] = current - cost;
-    return balances[uid];
+    return { entitled: false, charged: true, tokensRemaining: balances[uid] };
   };
 
   const consumeFreeTrial = async (uid, hash) => {
@@ -57,7 +68,7 @@ async function withServer(
   app.use(
     "/analyze",
     requireAuth,
-    chargeAnalysis(1, { deductTokens, consumeFreeTrial, getClientIpHash: () => ipHash }),
+    chargeAnalysis(1, { chargeTokens, consumeFreeTrial, getClientIpHash: () => ipHash }),
     (req, res) => res.status(200).json({ ok: true, tokensRemaining: req.tokensRemaining })
   );
 
@@ -105,6 +116,17 @@ test("real user with balance is charged one token", { concurrency: false }, asyn
     assert.equal(body.tokensRemaining, 2);
     assert.equal(state.balances["real-1"], 2);
   });
+});
+
+test("entitled user at zero balance passes without being charged", { concurrency: false }, async () => {
+  await withServer(
+    { balances: { "real-1": 0 }, entitledUids: new Set(["real-1"]) },
+    async (baseUrl, state) => {
+      const res = await post(baseUrl, "real-token");
+      assert.equal(res.status, 200);
+      assert.equal(state.balances["real-1"], 0);
+    }
+  );
 });
 
 test("real user at zero balance gets 402 INSUFFICIENT_TOKENS", { concurrency: false }, async () => {

@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 const express = require("express");
 const { getEnv } = require("../config/env");
 const purchaseService = require("../services/purchaseService");
-const { createCreditPacks } = require("../config/creditPacks");
+const { createPlans } = require("../config/plans");
 
 // Lemon Squeezy signs each delivery with HMAC-SHA256 over the exact raw body
 // bytes, hex-encoded in the X-Signature header. Comparison is timing-safe so
@@ -21,11 +21,28 @@ function verifySignature(rawBody, signatureHeader, secret) {
   );
 }
 
+function parseDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+// These carry a SubscriptionInvoice payload: data.id is an INVOICE id (not the
+// subscription id) and there is no renews_at, so they must never reach the
+// generic subscription_* state-sync below. Renewals arrive separately as
+// subscription_updated with the subscription shape.
+const SUBSCRIPTION_INVOICE_EVENTS = new Set([
+  "subscription_payment_success",
+  "subscription_payment_failed",
+  "subscription_payment_recovered",
+]);
+
 function createLemonWebhookRouter({
   getWebhookSecret = () => getEnv("LEMONSQUEEZY_WEBHOOK_SECRET"),
-  grantOrderTokensOnce = purchaseService.grantOrderTokensOnce,
-  revokeOrderTokensOnce = purchaseService.revokeOrderTokensOnce,
-  getPacks = () => createCreditPacks(),
+  getPlans = () => createPlans(),
+  activateLifetimeOnce = purchaseService.activateLifetimeOnce,
+  revokeOrderOnce = purchaseService.revokeOrderOnce,
+  applySubscriptionState = purchaseService.applySubscriptionState,
 } = {}) {
   const router = express.Router();
 
@@ -70,44 +87,52 @@ function createLemonWebhookRouter({
         const attributes = payload.data?.attributes || {};
 
         if (!uid || !orderId) {
-          // e.g. an order created manually in the dashboard — nothing to grant.
+          // e.g. an order created manually in the dashboard — nothing to do.
           console.warn(
-            `-> Lemon order_created without custom user_id (order ${orderId ?? "?"}); skipping grant.`
+            `-> Lemon order_created without custom user_id (order ${orderId ?? "?"}); skipping.`
           );
           return res.status(200).json({ received: true });
         }
 
         if (attributes.status !== "paid") {
           console.log(
-            `-> Lemon order ${orderId} status "${attributes.status}"; not granting.`
+            `-> Lemon order ${orderId} status "${attributes.status}"; ignoring.`
           );
           return res.status(200).json({ received: true });
         }
 
         const variantId = attributes.first_order_item?.variant_id;
-        const pack = getPacks().getPackByVariantId(variantId);
-        if (!pack) {
+        const plan = getPlans().getPlanByVariantId(variantId);
+        if (!plan) {
           // Deliberately do NOT record the order: after the variant env vars
-          // are fixed, the dashboard "Resend" redelivers and the grant runs.
+          // are fixed, the dashboard "Resend" redelivers and activation runs.
           console.error(
-            `-> Lemon order ${orderId} has unknown variant ${variantId}; NO credits granted. Fix LEMONSQUEEZY_VARIANT_ID_* and resend the webhook.`
+            `-> Lemon order ${orderId} has unknown variant ${variantId}; NOTHING granted. Fix LEMONSQUEEZY_VARIANT_ID_* and resend the webhook.`
           );
           return res.status(200).json({ received: true });
         }
 
-        const result = await grantOrderTokensOnce({
+        if (plan.type === "subscription") {
+          // Lemon Squeezy also fires order_created for a subscription's first
+          // order; entitlement for subscriptions is driven exclusively by the
+          // subscription_* events, so this is just an ack.
+          console.log(
+            `-> Lemon order ${orderId} is the initial order of a "${plan.id}" subscription; handled via subscription events.`
+          );
+          return res.status(200).json({ received: true });
+        }
+
+        const result = await activateLifetimeOnce({
           uid,
-          amount: pack.credits,
           orderId: String(orderId),
           meta: {
-            packId: pack.id,
             variantId: String(variantId),
             testMode: attributes.test_mode === true,
           },
         });
         console.log(
-          result.granted
-            ? `-> Lemon order ${orderId}: granted ${pack.credits} credits to ${uid} (balance ${result.newBalance}).`
+          result.activated
+            ? `-> Lemon order ${orderId}: lifetime access activated for ${uid}.`
             : `-> Lemon order ${orderId}: duplicate delivery ignored (${result.reason}).`
         );
         return res.status(200).json({ received: true });
@@ -116,11 +141,51 @@ function createLemonWebhookRouter({
       if (eventName === "order_refunded") {
         const orderId = payload.data?.id;
         if (!orderId) return res.status(200).json({ received: true });
-        const result = await revokeOrderTokensOnce({ orderId: String(orderId) });
+        const result = await revokeOrderOnce({ orderId: String(orderId) });
         console.log(
           result.revoked
-            ? `-> Lemon order ${orderId}: refund revoked credits (balance ${result.newBalance}).`
+            ? `-> Lemon order ${orderId}: refund processed.`
             : `-> Lemon order ${orderId}: refund ignored (${result.reason}).`
+        );
+        return res.status(200).json({ received: true });
+      }
+
+      if (SUBSCRIPTION_INVOICE_EVENTS.has(eventName)) {
+        return res.status(200).json({ received: true });
+      }
+
+      if (typeof eventName === "string" && eventName.startsWith("subscription_")) {
+        const attrs = payload.data?.attributes || {};
+        const subscriptionId = payload.data?.id;
+        if (!subscriptionId) return res.status(200).json({ received: true });
+
+        const plan = getPlans().getPlanByVariantId(attrs.variant_id);
+        if (!plan) {
+          console.error(
+            `-> Lemon ${eventName} for subscription ${subscriptionId} has unknown variant ${attrs.variant_id}; NOTHING applied. Fix LEMONSQUEEZY_VARIANT_ID_* and resend the webhook.`
+          );
+          return res.status(200).json({ received: true });
+        }
+
+        const result = await applySubscriptionState({
+          uid: payload.meta?.custom_data?.user_id ?? null,
+          subscriptionId: String(subscriptionId),
+          planId: plan.id,
+          status: attrs.status,
+          renewsAt: parseDate(attrs.renews_at),
+          endsAt: parseDate(attrs.ends_at),
+          updatedAt: parseDate(attrs.updated_at) ?? new Date(),
+          raw: {
+            variantId: String(attrs.variant_id),
+            customerId: attrs.customer_id ?? null,
+            orderId: attrs.order_id ? String(attrs.order_id) : null,
+            testMode: attrs.test_mode === true,
+          },
+        });
+        console.log(
+          result.applied
+            ? `-> Lemon ${eventName} sub ${subscriptionId}: plan "${plan.id}" status "${attrs.status}" applied.`
+            : `-> Lemon ${eventName} sub ${subscriptionId}: skipped (${result.reason}).`
         );
         return res.status(200).json({ received: true });
       }

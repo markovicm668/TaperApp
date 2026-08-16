@@ -54,9 +54,10 @@ function createFakeService(seed = {}) {
 }
 
 // In-memory stand-in for tokenService.chargeApplicationSave/refundApplicationSave.
-// Mirrors the contract: first save per uid is free (freeSaveUsed flag), then
+// Mirrors the contract: entitled (active-plan) uids save free without touching
+// freeSaveUsed; otherwise first save per uid is free (freeSaveUsed flag), then
 // 1 token per save; throws INSUFFICIENT_TOKENS at zero balance.
-function createFakeCharge({ balances = {}, freeSaveUsed = new Set() } = {}) {
+function createFakeCharge({ balances = {}, freeSaveUsed = new Set(), entitledUids = new Set() } = {}) {
   const calls = [];
   const refunds = [];
   return {
@@ -66,9 +67,12 @@ function createFakeCharge({ balances = {}, freeSaveUsed = new Set() } = {}) {
     refunds,
     async chargeSave(uid) {
       calls.push(uid);
+      if (entitledUids.has(uid)) {
+        return { charged: false, entitled: true, tokensRemaining: balances[uid] ?? 0 };
+      }
       if (!freeSaveUsed.has(uid)) {
         freeSaveUsed.add(uid);
-        return { charged: false, tokensRemaining: balances[uid] ?? 0 };
+        return { charged: false, entitled: false, tokensRemaining: balances[uid] ?? 0 };
       }
       const current = balances[uid] ?? 0;
       if (current < 1) {
@@ -78,10 +82,11 @@ function createFakeCharge({ balances = {}, freeSaveUsed = new Set() } = {}) {
         throw err;
       }
       balances[uid] = current - 1;
-      return { charged: true, tokensRemaining: balances[uid] };
+      return { charged: true, entitled: false, tokensRemaining: balances[uid] };
     },
-    async refundSave(uid, { charged }) {
-      refunds.push({ uid, charged });
+    async refundSave(uid, { charged, entitled }) {
+      refunds.push({ uid, charged, entitled });
+      if (entitled) return;
       if (charged) balances[uid] = (balances[uid] ?? 0) + 1;
       else freeSaveUsed.delete(uid);
     },
@@ -237,8 +242,43 @@ test('POST /applications refunds the charge when the application write fails', {
     const response = await postApplication(baseUrl);
     assert.equal(response.status, 500);
     assert.equal((await response.json()).error.code, 'APPLICATION_CREATE_FAILED');
-    assert.deepEqual(charge.refunds, [{ uid: 'user-a', charged: true }]);
+    assert.deepEqual(charge.refunds, [{ uid: 'user-a', charged: true, entitled: false }]);
     assert.equal(charge.balances['user-a'], 3);
+  }, { charge });
+});
+
+test('POST /applications: entitled user saves free without touching balance or freeSaveUsed', { concurrency: false }, async () => {
+  const service = createFakeService();
+  const charge = createFakeCharge({
+    balances: { 'user-a': 0 },
+    freeSaveUsed: new Set(['user-a']),
+    entitledUids: new Set(['user-a']),
+  });
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const response = await postApplication(baseUrl);
+    assert.equal(response.status, 201);
+    assert.equal((await response.json()).tokensRemaining, 0);
+    assert.equal(charge.balances['user-a'], 0);
+    assert.equal(service.store.size, 1);
+  }, { charge });
+});
+
+test('POST /applications: entitled refund is a no-op (freeSaveUsed not re-gifted)', { concurrency: false }, async () => {
+  const service = createFakeService();
+  service.createApplication = async () => {
+    throw new Error('firestore down');
+  };
+  const charge = createFakeCharge({
+    freeSaveUsed: new Set(['user-a']),
+    entitledUids: new Set(['user-a']),
+  });
+
+  await withServer(service, 'user-a', async (baseUrl) => {
+    const response = await postApplication(baseUrl);
+    assert.equal(response.status, 500);
+    assert.deepEqual(charge.refunds, [{ uid: 'user-a', charged: false, entitled: true }]);
+    assert.equal(charge.freeSaveUsed.has('user-a'), true);
   }, { charge });
 });
 

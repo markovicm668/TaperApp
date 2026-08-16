@@ -1,11 +1,14 @@
 const express = require("express");
 const lemonSqueezyService = require("../services/lemonSqueezyService");
-const { createCreditPacks } = require("../config/creditPacks");
+const { createPlans } = require("../config/plans");
+const { getUserAccess: realGetUserAccess } = require("../services/entitlementService");
 const { isAnonymousRequest } = require("../utils/authClaims");
 
 function createBillingRouter({
   createCheckout = lemonSqueezyService.createCheckout,
-  getPacks = () => createCreditPacks(),
+  getSubscription = lemonSqueezyService.getSubscription,
+  getUserAccess = realGetUserAccess,
+  getPlans = () => createPlans(),
 } = {}) {
   const router = express.Router();
 
@@ -15,19 +18,19 @@ function createBillingRouter({
     try {
       if (isAnonymousRequest(req)) {
         return res.status(403).json({
-          error: { code: "ANONYMOUS_FORBIDDEN", message: "Sign in to buy credits." },
+          error: { code: "ANONYMOUS_FORBIDDEN", message: "Sign in to upgrade." },
         });
       }
 
-      const pack = getPacks().getPackById(req.body?.packId);
-      if (!pack) {
+      const plan = getPlans().getPlanById(req.body?.planId);
+      if (!plan) {
         return res.status(400).json({
-          error: { code: "UNKNOWN_PACK", message: "Unknown credit pack." },
+          error: { code: "UNKNOWN_PLAN", message: "Unknown plan." },
         });
       }
-      if (!pack.variantId) {
+      if (!plan.variantId) {
         console.error(
-          `-> Billing misconfigured: no Lemon Squeezy variant id for pack "${pack.id}".`
+          `-> Billing misconfigured: no Lemon Squeezy variant id for plan "${plan.id}".`
         );
         return res.status(500).json({
           error: {
@@ -40,7 +43,7 @@ function createBillingRouter({
       let checkout;
       try {
         checkout = await createCheckout({
-          variantId: pack.variantId,
+          variantId: plan.variantId,
           uid: req.auth.uid,
           email: req.auth.email,
         });
@@ -57,9 +60,60 @@ function createBillingRouter({
         throw err;
       }
 
-      return res.status(200).json({ url: checkout.url, packId: pack.id });
+      return res.status(200).json({ url: checkout.url, planId: plan.id });
     } catch (err) {
       console.error("-> Billing checkout error:", err);
+      return res.status(500).json({
+        error: { code: "INTERNAL_ERROR", message: "Internal server error." },
+      });
+    }
+  });
+
+  // Returns a fresh Lemon Squeezy customer-portal URL (they are signed and
+  // expiring, so one is fetched per click — never stored).
+  router.get("/portal", async (req, res) => {
+    try {
+      if (isAnonymousRequest(req)) {
+        return res.status(403).json({
+          error: { code: "ANONYMOUS_FORBIDDEN", message: "Sign in first." },
+        });
+      }
+
+      const access = await getUserAccess(req.auth.uid);
+      if (!access.subscriptionId) {
+        return res.status(404).json({
+          error: { code: "NO_SUBSCRIPTION", message: "No subscription to manage." },
+        });
+      }
+
+      let subscription;
+      try {
+        subscription = await getSubscription(access.subscriptionId);
+      } catch (err) {
+        if (err.code === "LEMONSQUEEZY_API_ERROR" || err.code === "MISSING_ENV") {
+          console.error("-> Portal fetch failed:", err);
+          return res.status(502).json({
+            error: {
+              code: "PORTAL_FAILED",
+              message: "Could not open the billing portal. Please try again.",
+            },
+          });
+        }
+        throw err;
+      }
+
+      if (!subscription.customerPortalUrl) {
+        return res.status(502).json({
+          error: {
+            code: "PORTAL_FAILED",
+            message: "Could not open the billing portal. Please try again.",
+          },
+        });
+      }
+
+      return res.status(200).json({ url: subscription.customerPortalUrl });
+    } catch (err) {
+      console.error("-> Billing portal error:", err);
       return res.status(500).json({
         error: { code: "INTERNAL_ERROR", message: "Internal server error." },
       });

@@ -1,18 +1,47 @@
-import type { CreditPackId } from './api';
+import type { PlanId } from './api';
 
-// Display-only pack info. The server is authoritative for what a purchase
-// actually grants — keep credits/prices here in sync with
-// backend/config/creditPacks.js and the Lemon Squeezy product prices.
-export interface CreditPackDisplay {
-  id: CreditPackId;
+// Display-only plan info. The server is authoritative for what a purchase
+// actually grants — keep prices here in sync with backend/config/plans.js and
+// the Lemon Squeezy product prices.
+export interface PlanDisplay {
+  id: PlanId;
   name: string;
-  credits: number;
   priceLabel: string;
+  cadence: string;
+  blurb: string;
+  badge?: string;
   highlight?: boolean;
 }
 
-export const CREDIT_PACKS: CreditPackDisplay[] = [
-  { id: 'small', name: 'Starter', credits: 25, priceLabel: '$5' },
-  { id: 'medium', name: 'Plus', credits: 75, priceLabel: '$12', highlight: true },
-  { id: 'large', name: 'Pro', credits: 200, priceLabel: '$25' },
+export const PLANS: PlanDisplay[] = [
+  {
+    id: 'weekly',
+    name: 'Weekly',
+    priceLabel: '$4',
+    cadence: '/ week',
+    blurb: 'Billed weekly · Cancel anytime',
+  },
+  {
+    id: 'monthly',
+    name: 'Monthly',
+    priceLabel: '$9',
+    cadence: '/ month',
+    blurb: 'Billed monthly · Cancel anytime',
+    badge: 'Most popular',
+    highlight: true,
+  },
+  {
+    id: 'lifetime',
+    name: 'Lifetime',
+    priceLabel: '$29',
+    cadence: 'one-time',
+    blurb: 'Pay once, unlimited forever',
+    badge: 'Best value',
+  },
 ];
+
+export const PLAN_LABEL: Record<PlanId, string> = {
+  weekly: 'Weekly Plan',
+  monthly: 'Monthly Plan',
+  lifetime: 'Lifetime',
+};

@@ -1,14 +1,20 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { fetchUserProfile } from '@/lib/api';
+import { fetchUserProfile, type PlanId, type UserProfile } from '@/lib/api';
 
 interface TokenContextValue {
   tokensRemaining: number;
   tokensLoading: boolean;
   referralCode: string | null;
+  plan: PlanId | null;
+  entitled: boolean;
+  planExpiresAt: string | null;
+  hasSubscription: boolean;
+  subscriptionStatus: string | null;
   refreshTokens: () => Promise<void>;
   setTokensRemaining: (tokens: number) => void;
+  applyProfile: (profile: UserProfile) => void;
 }
 
 const TokenContext = createContext<TokenContextValue | null>(null);
@@ -23,6 +29,23 @@ export function TokenProvider({
   const [tokensRemaining, setTokensRemaining] = useState(0);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [plan, setPlan] = useState<PlanId | null>(null);
+  const [entitled, setEntitled] = useState(false);
+  const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+
+  const applyProfile = useCallback((profile: UserProfile) => {
+    setTokensRemaining(profile.tokensRemaining);
+    setPlan(profile.plan ?? null);
+    setEntitled(Boolean(profile.entitled));
+    setPlanExpiresAt(profile.planExpiresAt ?? null);
+    setHasSubscription(Boolean(profile.hasSubscription));
+    setSubscriptionStatus(profile.subscriptionStatus ?? null);
+    if (profile.referralCode) {
+      setReferralCode(profile.referralCode);
+    }
+  }, []);
 
   const refreshTokens = useCallback(async () => {
     try {
@@ -30,11 +53,7 @@ export function TokenProvider({
         typeof window !== 'undefined' ? localStorage.getItem('pendingReferralCode') : null;
 
       const profile = await fetchUserProfile(pendingRef || undefined);
-      setTokensRemaining(profile.tokensRemaining);
-
-      if (profile.referralCode) {
-        setReferralCode(profile.referralCode);
-      }
+      applyProfile(profile);
 
       if (pendingRef) {
         localStorage.removeItem('pendingReferralCode');
@@ -44,7 +63,7 @@ export function TokenProvider({
     } finally {
       setTokensLoading(false);
     }
-  }, []);
+  }, [applyProfile]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -52,13 +71,30 @@ export function TokenProvider({
       refreshTokens();
     } else {
       setTokensRemaining(0);
+      setPlan(null);
+      setEntitled(false);
+      setPlanExpiresAt(null);
+      setHasSubscription(false);
+      setSubscriptionStatus(null);
       setTokensLoading(false);
     }
   }, [isAuthenticated, refreshTokens]);
 
   return (
     <TokenContext.Provider
-      value={{ tokensRemaining, tokensLoading, referralCode, refreshTokens, setTokensRemaining }}
+      value={{
+        tokensRemaining,
+        tokensLoading,
+        referralCode,
+        plan,
+        entitled,
+        planExpiresAt,
+        hasSubscription,
+        subscriptionStatus,
+        refreshTokens,
+        setTokensRemaining,
+        applyProfile,
+      }}
     >
       {children}
     </TokenContext.Provider>

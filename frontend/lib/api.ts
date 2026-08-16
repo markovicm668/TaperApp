@@ -444,26 +444,41 @@ export async function parseResume(request: {
   return parsed;
 }
 
-export async function fetchUserProfile(
-  referralCode?: string
-): Promise<{ tokensRemaining: number; referralCode: string }> {
+export type PlanId = 'weekly' | 'monthly' | 'lifetime';
+
+export interface UserProfile {
+  tokensRemaining: number;
+  referralCode: string | null;
+  plan: PlanId | null;
+  entitled: boolean;
+  planExpiresAt: string | null;
+  subscriptionStatus: string | null;
+  hasSubscription: boolean;
+}
+
+export async function fetchUserProfile(referralCode?: string): Promise<UserProfile> {
   const query = referralCode ? `?ref=${encodeURIComponent(referralCode)}` : '';
   const res = await fetchWithAuth(`/user/me${query}`, { method: 'GET' }, 'Failed to fetch user profile');
   return res.json();
 }
 
-export type CreditPackId = 'small' | 'medium' | 'large';
-
-// Asks the backend to create a Lemon Squeezy checkout for a credit pack. The
-// backend owns the pack -> variant -> credits mapping; the returned URL is
-// opened in the lemon.js overlay (see lib/lemonsqueezy.ts). Credits are
-// granted by the payment webhook, never by this call.
-export async function createCheckout(packId: CreditPackId): Promise<{ url: string }> {
+// Asks the backend to create a Lemon Squeezy checkout for a plan. The backend
+// owns the plan -> variant mapping; the returned URL is opened in the lemon.js
+// overlay (see lib/lemonsqueezy.ts). Entitlement is granted by the payment
+// webhooks, never by this call.
+export async function createCheckout(planId: PlanId): Promise<{ url: string }> {
   const res = await fetchWithAuth('/billing/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ packId }),
+    body: JSON.stringify({ planId }),
   }, 'Failed to start checkout');
+  return res.json();
+}
+
+// Fetches a fresh Lemon Squeezy customer-portal URL for the signed-in user's
+// subscription (they expire, so one is fetched per click).
+export async function fetchPortalUrl(): Promise<{ url: string }> {
+  const res = await fetchWithAuth('/billing/portal', { method: 'GET' }, 'Failed to open billing portal');
   return res.json();
 }
 

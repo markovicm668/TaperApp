@@ -3,15 +3,17 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, ArrowUpCircle, BarChart3, FileSearch, HelpCircle, LayoutGrid, Plus, Settings, Sparkles } from 'lucide-react';
+import { ArrowRight, ArrowUpCircle, BarChart3, FileSearch, HelpCircle, LayoutGrid, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { addCredits } from '@/lib/api';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
+import { PLAN_LABEL } from '@/lib/billing';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { InviteFriendPanel } from '@/components/invite-friend-panel';
+import { UpgradePlansDialog } from '@/components/upgrade-plans-dialog';
 import {
   Dialog,
   DialogContent,
@@ -70,14 +72,9 @@ export function AppNavbar({
   const pathname = usePathname();
   const hasResults = useHasResults();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
-
-  const plans = [
-    { id: 'yearly' as const, name: 'Yearly', badge: '70% off', bestDeal: true, billed: '$36 billed upfront', price: '$3' },
-    { id: 'monthly' as const, name: 'Monthly', badge: null, bestDeal: false, billed: '$9 billed monthly', price: '$9' },
-  ];
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const { signOut } = useAuth();
-  const { referralCode, setTokensRemaining } = useTokens();
+  const { referralCode, plan, entitled, setTokensRemaining } = useTokens();
 
   const isActivePath = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -175,8 +172,14 @@ export function AppNavbar({
             {isAuthenticated ? (
               <>
                 <div className="flex h-8 items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2.5 text-xs font-semibold tabular-nums text-foreground">
-                  {creditsRemaining}
-                  <span className="ml-0.5 font-normal text-muted-foreground">credits</span>
+                  {entitled ? (
+                    <span className="font-medium">{plan ? PLAN_LABEL[plan] : 'Pro'} · Unlimited</span>
+                  ) : (
+                    <>
+                      {creditsRemaining}
+                      <span className="ml-0.5 font-normal text-muted-foreground">credits</span>
+                    </>
+                  )}
                   <AdminOnly>
                   {process.env.NEXT_PUBLIC_ENABLE_ADD_CREDITS === 'true' && (
                     <button
@@ -222,104 +225,26 @@ export function AppNavbar({
                 )}
 
                 {/* Upgrade to Pro */}
-                <Dialog>
+                {!entitled && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          aria-label="Upgrade to Pro"
-                          onClick={() => track('nav_upgrade_clicked')}
-                        >
-                          <ArrowUpCircle className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        aria-label="Upgrade to Pro"
+                        onClick={() => {
+                          track('nav_upgrade_clicked');
+                          setUpgradeOpen(true);
+                        }}
+                      >
+                        <ArrowUpCircle className="h-4 w-4" />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent><p>Upgrade to Pro</p></TooltipContent>
                   </Tooltip>
-                  <DialogContent className="sm:max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle className="text-base">Tailor Pro</DialogTitle>
-                    </DialogHeader>
-
-                    {/* Feature highlights */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
-                        <FileSearch className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground leading-snug">Unlimited<br />analyses</p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
-                        <Sparkles className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground leading-snug">Advanced<br />AI insights</p>
-                      </div>
-                    </div>
-
-                    {/* Pricing options */}
-                    <div className="space-y-2">
-                      {plans.map((plan) => (
-                        <button
-                          key={plan.id}
-                          onClick={() => {
-                            setSelectedPlan(plan.id);
-                            track('nav_upgrade_plan_selected', { plan: plan.id });
-                          }}
-                          className={cn(
-                            'w-full flex items-center justify-between rounded-lg border px-3.5 py-3 text-left transition-colors',
-                            selectedPlan === plan.id
-                              ? 'border-foreground bg-secondary'
-                              : 'border-border hover:bg-muted/50'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0',
-                              selectedPlan === plan.id ? 'border-foreground' : 'border-muted-foreground/30'
-                            )}>
-                              {selectedPlan === plan.id && <div className="h-2 w-2 rounded-full bg-foreground" />}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-medium">{plan.name}</span>
-                                {plan.badge && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
-                                    {plan.badge}
-                                  </span>
-                                )}
-                                {plan.bestDeal && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
-                                    Best deal
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{plan.billed}</p>
-                            </div>
-                          </div>
-                          <span className="text-sm font-semibold tabular-nums">
-                            {plan.price}<span className="text-xs font-normal text-muted-foreground"> / mo</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Button
-                        className="w-full"
-                        onClick={() => {
-                          track('nav_upgrade_confirmed_clicked', { plan: selectedPlan });
-                          toast.info('Tailor Pro is launching soon', {
-                            description:
-                              "Paid plans aren't live yet — invite a friend for free credits in the meantime.",
-                          });
-                        }}
-                      >
-                        Upgrade to Tailor Pro
-                      </Button>
-                      <p className="text-center text-xs text-muted-foreground">Renews automatically · Cancel anytime</p>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                )}
+                <UpgradePlansDialog open={upgradeOpen} onOpenChange={setUpgradeOpen} source="nav" />
 
                 <DropdownMenu
                   onOpenChange={(open) => {
@@ -343,7 +268,9 @@ export function AppNavbar({
                     <div className="flex items-center gap-2 p-2">
                       <div className="flex flex-col space-y-1 leading-none">
                         <p className="font-medium">{userName || 'User'}</p>
-                        <p className="text-xs text-muted-foreground">Free Plan</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entitled && plan ? PLAN_LABEL[plan] : 'Free Plan'}
+                        </p>
                       </div>
                     </div>
                     <DropdownMenuSeparator />

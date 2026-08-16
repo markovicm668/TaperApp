@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
 import { AnalysisProgress } from '@/components/analysis-progress';
-import { OutOfCreditsDialog } from '@/components/out-of-credits-dialog';
+import { UpgradePlansDialog } from '@/components/upgrade-plans-dialog';
 import { parseResume, parseResumePdf } from '@/lib/api';
 import { useAnalyzeFlow } from '@/lib/analyze/useAnalyzeFlow';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
@@ -57,7 +57,7 @@ export default function AnalyzePage() {
     setParsedPayload,
     resetWorkspace,
   } = useResumeActions();
-  const { tokensRemaining, tokensLoading, setTokensRemaining } = useTokens();
+  const { tokensRemaining, tokensLoading, entitled, setTokensRemaining } = useTokens();
   const { isAdmin } = useAdmin();
 
   const [resumeData, setResumeData] = useState<ResumeInput | null>(null);
@@ -84,13 +84,13 @@ export default function AnalyzePage() {
 
   const handleAnalyzeClick = useCallback(() => {
     if (!resumeData || !jobDescription) return;
-    if (!tokensLoading && tokensRemaining <= 0) {
+    if (!tokensLoading && !entitled && tokensRemaining <= 0) {
       track('analysis_blocked_out_of_credits', { source: 'analyze_page' });
       setShowOutOfCredits(true);
       return;
     }
     void handleAnalyze(resumeData, jobDescription);
-  }, [handleAnalyze, jobDescription, resumeData, tokensLoading, tokensRemaining, setShowOutOfCredits]);
+  }, [handleAnalyze, jobDescription, resumeData, tokensLoading, entitled, tokensRemaining, setShowOutOfCredits]);
 
   const handleParseOnly = useCallback(async () => {
     if (!resumeData) return;
@@ -283,7 +283,14 @@ export default function AnalyzePage() {
       </div>
 
       <AnalysisProgress open={isAnalyzing} parseDone={parseDone} onComplete={handleAnalysisComplete} />
-      <OutOfCreditsDialog open={showOutOfCredits} onOpenChange={setShowOutOfCredits} />
+      <UpgradePlansDialog
+        open={showOutOfCredits}
+        onOpenChange={setShowOutOfCredits}
+        source="out_of_credits"
+        showInvitePanel
+        title="You're out of credits"
+        description="Upgrade for unlimited analyses, or invite a friend for free credits."
+      />
     </div>
   );
 }

@@ -3,16 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowUpCircle, BarChart3, Copy, FileSearch, HelpCircle, LayoutGrid, Settings, Sparkles, UserPlus, Zap } from 'lucide-react';
+import { ArrowUpCircle, BarChart3, Copy, CreditCard, FileSearch, HelpCircle, LayoutGrid, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import { fetchPortalUrl } from '@/lib/api';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
+import { PLAN_LABEL } from '@/lib/billing';
 import { cn } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InviteFriendPanel } from '@/components/invite-friend-panel';
+import { UpgradePlansDialog } from '@/components/upgrade-plans-dialog';
 import {
   Dialog,
   DialogContent,
@@ -61,18 +64,30 @@ export function AppSidebar({
   const hasResults = useHasResults();
   const isCompact = mode === 'compact';
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly'>('yearly');
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const { signOut } = useAuth();
-  const { referralCode } = useTokens();
+  const { referralCode, plan, entitled, hasSubscription } = useTokens();
 
   const referralLink = referralCode
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}?ref=${referralCode}`
     : '';
+  const planLabel = entitled && plan ? PLAN_LABEL[plan] : 'Free Plan';
 
-  const plans = [
-    { id: 'yearly' as const, name: 'Yearly', badge: '70% off', bestDeal: true, billed: '$36 billed upfront', price: '$3' },
-    { id: 'monthly' as const, name: 'Monthly', badge: null, bestDeal: false, billed: '$9 billed monthly', price: '$9' },
-  ];
+  const handleManageSubscription = async () => {
+    track('manage_subscription_clicked', { source: 'sidebar' });
+    setPortalLoading(true);
+    try {
+      const { url } = await fetchPortalUrl();
+      window.open(url, '_blank');
+    } catch (err) {
+      toast.error('Could not open the billing portal', {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const handleCopyReferralLink = () => {
     if (!referralLink) return;
@@ -251,7 +266,7 @@ export function AppSidebar({
             <div className="min-w-0 text-left">
               <p className="truncate text-sm font-medium text-foreground">{userName || 'User'}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {isAuthenticated ? 'Free Plan' : 'Guest'}
+                {isAuthenticated ? planLabel : 'Guest'}
               </p>
             </div>
           </Button>
@@ -266,7 +281,7 @@ export function AppSidebar({
         <div className="flex items-center justify-start gap-2 p-2">
           <div className="flex flex-col space-y-1 leading-none">
             <p className="font-medium">{userName || 'User'}</p>
-            <p className="text-xs text-muted-foreground">{isAuthenticated ? 'Free Plan' : 'Guest'}</p>
+            <p className="text-xs text-muted-foreground">{isAuthenticated ? planLabel : 'Guest'}</p>
           </div>
         </div>
         <DropdownMenuSeparator />
@@ -327,12 +342,14 @@ export function AppSidebar({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex h-10 min-w-10 items-center justify-center rounded-xl border border-border/80 bg-background/70 px-2 text-xs font-semibold text-foreground tabular-nums">
-                      {compactCreditsValue}
-                      <span className="sr-only">Credits remaining: {creditsRemaining}</span>
+                      {entitled ? '∞' : compactCreditsValue}
+                      <span className="sr-only">
+                        {entitled ? 'Unlimited plan' : `Credits remaining: ${creditsRemaining}`}
+                      </span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    <p>Credits: {creditsRemaining}</p>
+                    <p>{entitled ? `${plan ? PLAN_LABEL[plan] : 'Pro'}: unlimited` : `Credits: ${creditsRemaining}`}</p>
                   </TooltipContent>
                 </Tooltip>
                 {isAuthenticated && referralCode && (
@@ -378,95 +395,40 @@ export function AppSidebar({
                   variant="outline"
                   className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
                 >
-                  <span className="text-[11px] tracking-wide text-muted-foreground">Credits</span>
+                  <span className="text-[11px] tracking-wide text-muted-foreground">
+                    {entitled ? 'Plan' : 'Credits'}
+                  </span>
                   <span className="text-xs font-semibold text-foreground tabular-nums">
-                    {creditsRemaining}
+                    {entitled ? (plan ? PLAN_LABEL[plan] : 'Unlimited') : creditsRemaining}
                   </span>
                 </Badge>
 
-                <Dialog>
-                  <DialogTrigger asChild>
+                {entitled ? (
+                  hasSubscription && (
                     <Button
                       variant="outline"
                       className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
+                      disabled={portalLoading}
+                      onClick={handleManageSubscription}
                     >
-                      <span className="text-[11px] tracking-wide text-muted-foreground">Upgrade to Pro</span>
-                      <ArrowUpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[11px] tracking-wide text-muted-foreground">Manage subscription</span>
+                      <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle className="text-base">Tailor Pro</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
-                        <FileSearch className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground" />
-                        <p className="text-xs leading-snug text-muted-foreground">Unlimited<br />analyses</p>
-                      </div>
-                      <div className="rounded-lg border border-border bg-muted/50 px-3 py-3 text-center">
-                        <Sparkles className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground" />
-                        <p className="text-xs leading-snug text-muted-foreground">Advanced<br />AI insights</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {plans.map((plan) => (
-                        <button
-                          key={plan.id}
-                          onClick={() => setSelectedPlan(plan.id)}
-                          className={cn(
-                            'flex w-full items-center justify-between rounded-lg border px-3.5 py-3 text-left transition-colors',
-                            selectedPlan === plan.id
-                              ? 'border-foreground bg-secondary'
-                              : 'border-border hover:bg-muted/50'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
-                              selectedPlan === plan.id ? 'border-foreground' : 'border-muted-foreground/30'
-                            )}>
-                              {selectedPlan === plan.id && <div className="h-2 w-2 rounded-full bg-foreground" />}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-medium">{plan.name}</span>
-                                {plan.badge && (
-                                  <span className="rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    {plan.badge}
-                                  </span>
-                                )}
-                                {plan.bestDeal && (
-                                  <span className="rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    Best deal
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{plan.billed}</p>
-                            </div>
-                          </div>
-                          <span className="text-sm font-semibold tabular-nums">
-                            {plan.price}<span className="text-xs font-normal text-muted-foreground"> / mo</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <Button
-                        className="w-full"
-                        onClick={() => {
-                          track('nav_upgrade_confirmed_clicked', { plan: selectedPlan });
-                          toast.info('Tailor Pro is launching soon', {
-                            description:
-                              "Paid plans aren't live yet — invite a friend for free credits in the meantime.",
-                          });
-                        }}
-                      >
-                        Upgrade to Tailor Pro
-                      </Button>
-                      <p className="text-center text-xs text-muted-foreground">Renews automatically · Cancel anytime</p>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                  )
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="flex h-10 w-full items-center justify-between rounded-xl border-border/80 bg-background/70 px-3 text-left"
+                    onClick={() => {
+                      track('nav_upgrade_clicked');
+                      setUpgradeOpen(true);
+                    }}
+                  >
+                    <span className="text-[11px] tracking-wide text-muted-foreground">Upgrade to Pro</span>
+                    <ArrowUpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                )}
+                <UpgradePlansDialog open={upgradeOpen} onOpenChange={setUpgradeOpen} source="sidebar" />
 
                 {isAuthenticated && referralCode && (
                   <Dialog>

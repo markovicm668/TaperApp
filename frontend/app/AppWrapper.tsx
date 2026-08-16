@@ -14,13 +14,18 @@ import type { User } from '@/lib/types';
 import { identifyUser, initAnalytics, resetAnalytics } from '@/lib/analytics';
 import { readWorkspaceFromSession } from '@/lib/resume/storage';
 
-function mapAuthUserToAppUser(params: { name: string; email: string; creditsRemaining: number }): User {
+function mapAuthUserToAppUser(params: {
+  name: string;
+  email: string;
+  creditsRemaining: number;
+  plan: User['plan'];
+}): User {
   return {
     id: params.email,
     name: params.name,
     email: params.email,
     creditsRemaining: params.creditsRemaining,
-    plan: 'free',
+    plan: params.plan,
   };
 }
 
@@ -37,7 +42,7 @@ function AuthShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
-  const { tokensRemaining } = useTokens();
+  const { tokensRemaining, plan, entitled } = useTokens();
 
   const isLoginPage = pathname === '/login';
   const isLandingPage = pathname === '/';
@@ -130,6 +135,7 @@ function AuthShell({ children }: { children: ReactNode }) {
         name: user.displayName || fallbackName,
         email: user.email || 'unknown@example.com',
         creditsRemaining: tokensRemaining,
+        plan: entitled && plan ? plan : 'free',
       })
     : guestUser;
   const isAuthed = Boolean(user);

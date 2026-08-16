@@ -34,7 +34,7 @@ export interface AnalyzeFlow {
 export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow {
   const router = useRouter();
   const { setSourceInput, setAnalysisSnapshot, setParsedPayload, setApplicationId } = useResumeActions();
-  const { tokensRemaining, tokensLoading, setTokensRemaining } = useTokens();
+  const { tokensRemaining, tokensLoading, entitled, setTokensRemaining } = useTokens();
   const { user, ensureAnonymousUser } = useAuth();
   const source: AnalyzeSource = options.source ?? 'analyze_page';
 
@@ -69,7 +69,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
       // primary guard lives in the click handler, e.g. app/analyze/page.tsx).
       // Gated on tokensLoading so we never false-positive during the brief
       // window before the balance has loaded for a freshly-funded user.
-      if (user && !tokensLoading && tokensRemaining <= 0) {
+      if (user && !tokensLoading && !entitled && tokensRemaining <= 0) {
         track('analysis_blocked_out_of_credits', { source });
         setShowOutOfCredits(true);
         return;
@@ -253,6 +253,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
       tryNavigateToResults,
       user,
       tokensLoading,
+      entitled,
       tokensRemaining,
       ensureAnonymousUser,
     ]

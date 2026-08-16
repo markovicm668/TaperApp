@@ -64,8 +64,9 @@ app.use("/user/me", requireAuth, userRoute);
 // All three AI endpoints require a valid Firebase token (anonymous or real) so
 // a token-less request is rejected outright — this closes the "drop the header
 // for unlimited free analyses" exploit. chargeAnalysis deducts a token (real
-// user) or consumes the free trial (anonymous user, additionally throttled per
-// client IP so minting fresh anon uids can't refill it);
+// user without an active plan; entitled plan users pass free) or consumes the
+// free trial (anonymous user, additionally throttled per client IP so minting
+// fresh anon uids can't refill it);
 // requireAnalyzeEligibility is a read-only gate so a Gemini parse is never
 // burned on a request that could only 402 at /analyze anyway. The other
 // billable moment is POST /applications: saving an anonymously-produced
@@ -79,7 +80,7 @@ app.use("/parse-pdf", requireAuth, requireAnalyzeEligibility(1), parsePdfRoute);
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);
 app.use("/applications", requireAuth, applicationsRoute);
-// Anonymous users can't buy credits (the route 403s); purchases are granted by
+// Anonymous users can't buy a plan (the route 403s); entitlement is granted by
 // the Lemon Squeezy webhook above, never by this route.
 app.use("/billing", requireAuth, billingRoute);
 

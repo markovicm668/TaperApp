@@ -1,4 +1,4 @@
-const { deductTokens: realDeductTokens } = require("../services/tokenService");
+const { chargeAnalysisTokens: realChargeAnalysisTokens } = require("../services/tokenService");
 const { consumeFreeTrial: realConsumeFreeTrial } = require("../services/freeTrialService");
 const { getClientIpHash: realGetClientIpHash } = require("../utils/clientIp");
 const { isAnonymousRequest } = require("../utils/authClaims");
@@ -11,13 +11,14 @@ const TRIAL_DENIED_MESSAGES = {
 
 // Charges an analysis. Assumes requireAuth ran upstream, so req.auth.uid is
 // always present (anonymous or real). Anonymous users spend their one free
-// trial (throttled per client IP); real users are debited a token. The only
+// trial (throttled per client IP); real users are debited a token unless an
+// active plan entitles them to unlimited use (chargeTokens decides). The only
 // place a token is deducted or a trial consumed on the /analyze path.
 // Dependencies are injectable for testing (mirrors createRequireAuth).
 function chargeAnalysis(
   cost,
   {
-    deductTokens = realDeductTokens,
+    chargeTokens = realChargeAnalysisTokens,
     consumeFreeTrial = realConsumeFreeTrial,
     getClientIpHash = realGetClientIpHash,
   } = {}
@@ -38,8 +39,9 @@ function chargeAnalysis(
         return next();
       }
 
-      const newBalance = await deductTokens(req.auth.uid, cost);
-      req.tokensRemaining = newBalance;
+      const result = await chargeTokens(req.auth.uid, cost);
+      req.tokensRemaining = result.tokensRemaining;
+      req.entitled = result.entitled;
       return next();
     } catch (err) {
       if (err.code === "INSUFFICIENT_TOKENS") {
