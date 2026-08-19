@@ -46,6 +46,7 @@ async function getUserAccess(uid) {
     tokensRemaining: snap.exists ? data.tokensRemaining : INITIAL_TOKENS,
     subscriptionId: data.subscriptionId ?? null,
     subscriptionStatus: data.subscriptionStatus ?? null,
+    polarCustomerId: data.polarCustomerId ?? null,
   };
 }
 

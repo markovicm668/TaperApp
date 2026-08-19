@@ -555,3 +555,82 @@ test('generateResumeHtml renders header from basics when sections exist but cont
   assert.equal(html.includes('<h1 class="resume-name">Jane Doe</h1>'), true);
   assert.equal(html.includes('jane@example.com'), true);
 });
+
+test('generateResumeHtml renders a date-bearing custom section as structured entries', () => {
+  const resume = {
+    basics: { name: 'Fatma Ahmed Hassan' },
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Fatma Ahmed Hassan'] },
+      {
+        id: 'sec-training',
+        title: 'Training',
+        kind: 'custom',
+        // Raw PDF-extraction order: each entry's date is stranded on its own
+        // line after that entry's bullets.
+        lines: [
+          'Route Academy',
+          '9-month Diploma in Full Stack Web Development.',
+          '• Acquired expertise in frontend development using JavaScript.',
+          '07/2021 – 03/2022',
+          '• Acquired expertise in Backend development using PHP.',
+          'Resala Organization',
+          'Web Design Training.',
+          '•HTML, HTML 5, CSS, CSS3, Bootstrap 5 .',
+          '10/2020 – 03/2021',
+        ],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'sec-training'],
+  };
+
+  const html = generateResumeHtml(resume);
+
+  // Section renders structurally (education-style entry markup), not flat lines.
+  assert.equal(html.includes('<h2>Training</h2>'), true);
+  assert.equal((html.match(/class="education-item"/g) || []).length >= 2, true);
+  // Each entry's date is re-associated to its heading and right-aligned.
+  assert.equal(html.includes('<div class="row-right">07/2021 – 03/2022</div>'), true);
+  assert.equal(html.includes('<div class="row-right">10/2020 – 03/2021</div>'), true);
+  assert.equal(html.includes('>Route Academy</div>'), true);
+  assert.equal(html.includes('>Resala Organization</div>'), true);
+  // Bullets (including the no-space "•HTML" marker) render as list items.
+  assert.equal(html.includes('<ul class="dash-list">'), true);
+  assert.equal(html.includes('HTML, HTML 5, CSS, CSS3, Bootstrap 5 .</li>'), true);
+  // The stranded date lines must not leak as their own paragraphs.
+  assert.equal(html.includes('<p>07/2021 – 03/2022</p>'), false);
+});
+
+test('generateResumeHtml keeps a dateless custom section as flat lines', () => {
+  const resume = {
+    basics: { name: 'Jane Doe' },
+    work: [],
+    education: [],
+    projects: [],
+    awards: [],
+    skills: {},
+    languages: [],
+    sections: [
+      { id: 'canonical-header', title: 'Header', kind: 'header', lines: ['Jane Doe'] },
+      {
+        id: 'sec-interests',
+        title: 'Interests',
+        kind: 'custom',
+        lines: ['Photography', 'Open-source contribution', 'Trail running'],
+      },
+    ],
+    sectionOrder: ['canonical-header', 'sec-interests'],
+  };
+
+  const html = generateResumeHtml(resume);
+
+  assert.equal(html.includes('<h2>Interests</h2>'), true);
+  // No dates -> stays on the flat renderer, no structured entry markup.
+  assert.equal(html.includes('class="education-item"'), false);
+  assert.equal(html.includes('<p>Photography</p>'), true);
+});

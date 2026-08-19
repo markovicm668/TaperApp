@@ -164,39 +164,38 @@ Errors:
 - `CORS_ALLOWED_ORIGIN` (optional): comma-separated list of allowed frontend origins (default `http://localhost:3000`)
 - `PORT` (optional): defaults to `8080` (Cloud Run standard)
 - `ADMIN_EMAIL` (optional): email of the account allowed to call `POST /user/me/add-credits`; the route 403s for everyone if unset
-- `LEMONSQUEEZY_API_KEY` (required for purchases): Lemon Squeezy API key used to create checkouts and fetch subscriptions
-- `LEMONSQUEEZY_STORE_ID` (required for purchases): Lemon Squeezy store id
-- `LEMONSQUEEZY_WEBHOOK_SECRET` (required for purchases): signing secret set on the Lemon Squeezy webhook
-- `LEMONSQUEEZY_VARIANT_ID_WEEKLY` / `LEMONSQUEEZY_VARIANT_ID_MONTHLY` / `LEMONSQUEEZY_VARIANT_ID_LIFETIME` (required for purchases): variant ids of the three plan products
-  - Test mode and live mode have different API keys, webhook secrets, and variant ids — configure per environment. Missing values don't break the rest of the API; only `/billing/*` and the webhook fail.
+- `POLAR_SERVER` (required for purchases): `sandbox` or `production` — selects the Polar API base URL
+- `POLAR_ACCESS_TOKEN` (required for purchases): Polar Organization Access Token used to create checkouts and customer sessions
+- `POLAR_WEBHOOK_SECRET` (required for purchases): signing secret set on the Polar webhook endpoint
+- `POLAR_PRODUCT_ID_WEEKLY` / `POLAR_PRODUCT_ID_MONTHLY` / `POLAR_PRODUCT_ID_LIFETIME` (required for purchases): the three Polar product ids
+- `APP_ORIGIN` (optional): frontend origin for the checkout overlay's `embed_origin` and the success redirect; falls back to `CORS_ALLOWED_ORIGIN`
+  - Sandbox and production are separate Polar environments with different tokens, product ids, and webhook secrets — configure per environment. Missing values don't break the rest of the API; only `/billing/*` and the webhook fail.
 
-## Billing (Lemon Squeezy)
+## Billing (Polar)
 
 Three plans grant **unlimited usage** (analyses, saves, downloads) while active: a $4/week subscription, a $9/month subscription, and a $29 one-time lifetime purchase. Free users keep the credit system (5 starter tokens, referrals, one free anonymous trial).
 
-Entitlement lives on `users/{uid}`: `plan` (`weekly|monthly|lifetime|null`) + `planExpiresAt` (null for lifetime). A user is entitled when `plan === 'lifetime'` or `planExpiresAt` is in the future. Subscriptions extend `planExpiresAt` only via webhooks (`renews_at` while live, `ends_at` for a cancelled-in-grace period), so access fails closed if webhooks stop. Subscription state is mirrored in `lemonSqueezySubscriptions/{subId}` (uid resolution + out-of-order guard on `updated_at`); lifetime orders are deduped once per order id in `lemonSqueezyOrders`.
+Entitlement lives on `users/{uid}`: `plan` (`weekly|monthly|lifetime|null`) + `planExpiresAt` (null for lifetime). A user is entitled when `plan === 'lifetime'` or `planExpiresAt` is in the future. Subscriptions extend `planExpiresAt` only via webhooks (`current_period_end` while live, `ends_at` for a cancelled-in-grace period), so access fails closed if webhooks stop. Subscription state is mirrored in `polarSubscriptions/{subId}` (uid resolution + out-of-order guard on `modified_at`); lifetime orders are deduped once per order id in `polarOrders`.
 
-- `POST /billing/checkout` (auth required, anonymous users 403): body `{ "planId": "weekly" | "monthly" | "lifetime" }`, returns `{ "url": "<overlay checkout url>" }`. The plan → variant mapping lives in `config/plans.js`.
-- `GET /billing/portal` (auth required): returns a fresh Lemon Squeezy customer-portal URL for the user's subscription (404 `NO_SUBSCRIPTION` if they have none). Portal URLs are signed and expiring — fetched per click, never stored.
-- `POST /webhooks/lemonsqueezy`: Lemon Squeezy delivery endpoint (HMAC-verified over the raw body — the route is mounted before the global JSON parser in `index.js`, keep it there). `subscription_*` events sync plan state; `order_created` on the lifetime variant activates lifetime access; `order_refunded` revokes a lifetime order (and still claws back legacy credit-pack orders).
+- `POST /billing/checkout` (auth required, anonymous users 403): body `{ "planId": "weekly" | "monthly" | "lifetime" }`, returns `{ "url": "<overlay checkout url>" }`. The plan → product mapping lives in `config/plans.js`. The checkout carries `external_customer_id` and `metadata.user_id` = the Firebase uid.
+- `GET /billing/portal` (auth required): returns a fresh Polar customer-portal URL for the user's saved `polarCustomerId` (404 `NO_SUBSCRIPTION` if none). Portal URLs are short-lived — fetched per click, never stored.
+- `POST /webhooks/polar`: Polar delivery endpoint, verified with the Standard Webhooks spec over the raw body (the route is mounted before the global JSON parser in `index.js`, keep it there). `subscription.*` events sync plan state; `order.created` on the lifetime product activates lifetime access; `order.created` with `billing_reason: subscription_cycle` advances a renewal; `order.refunded`/`refund.created` revoke a lifetime order.
 
-Dashboard setup: create two **subscription** products ($4 billed weekly, $9 billed monthly — the billing interval lives on the Lemon Squeezy variant) and one **single-payment** $29 lifetime product; copy each variant id into the matching env var. Create an API key, and a webhook pointing at `https://<backend-host>/webhooks/lemonsqueezy` (the backend's public domain — on Railway, the generated `*.up.railway.app` domain or your custom domain) subscribed to: `order_created`, `order_refunded`, `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_resumed`, `subscription_expired`, `subscription_paused`, `subscription_unpaused`, `subscription_plan_changed`.
+Dashboard setup (do this in the **sandbox** org first, then repeat in production): create two **subscription** products ($4 recurring weekly, $9 recurring monthly) and one **one-time** $29 lifetime product; copy each product id into the matching env var. Create an Organization Access Token, and a webhook pointing at `https://<backend-host>/webhooks/polar` (on Railway, the generated `*.up.railway.app` domain or your custom domain) subscribed to: `subscription.created`, `subscription.updated`, `subscription.active`, `subscription.canceled`, `subscription.revoked`, `order.created`, `order.refunded` (and `refund.created` if available).
 
-Test mode and live mode are fully separate in Lemon Squeezy (different API keys, variant ids, and webhook secrets). Configure the backend with the **test-mode** values while the store is unactivated; swap all six to the live values once the store is activated.
+Sandbox (`sandbox-api.polar.sh`) and production (`api.polar.sh`) are fully isolated. Build and verify against sandbox with `POLAR_SERVER=sandbox` and sandbox credentials, then flip `POLAR_SERVER=production` and swap the token/product ids/webhook secret to the production values. **Renewals are `order.created` events (`billing_reason: subscription_cycle`), not subscription events** — the webhook handles both.
 
 Deploy secrets on Railway — add them in the service's **Variables** tab (saving redeploys), or via the CLI:
 
 ```bash
 railway variables \
-  --set "LEMONSQUEEZY_API_KEY=..." \
-  --set "LEMONSQUEEZY_STORE_ID=..." \
-  --set "LEMONSQUEEZY_WEBHOOK_SECRET=..." \
-  --set "LEMONSQUEEZY_VARIANT_ID_WEEKLY=..." \
-  --set "LEMONSQUEEZY_VARIANT_ID_MONTHLY=..." \
-  --set "LEMONSQUEEZY_VARIANT_ID_LIFETIME=..."
+  --set "POLAR_SERVER=sandbox" \
+  --set "POLAR_ACCESS_TOKEN=..." \
+  --set "POLAR_WEBHOOK_SECRET=..." \
+  --set "POLAR_PRODUCT_ID_WEEKLY=..." \
+  --set "POLAR_PRODUCT_ID_MONTHLY=..." \
+  --set "POLAR_PRODUCT_ID_LIFETIME=..."
 ```
-
-If you deployed the earlier credit-pack version, delete the now-unused `LEMONSQUEEZY_VARIANT_ID_SMALL`, `LEMONSQUEEZY_VARIANT_ID_MEDIUM`, and `LEMONSQUEEZY_VARIANT_ID_LARGE` variables from the same tab.
 
 ## Docker (Cloud Run ready)
 

@@ -3,14 +3,16 @@ const { FieldValue } = require("firebase-admin/firestore");
 const { INITIAL_TOKENS, USERS_COLLECTION } = require("./tokenService");
 const { computeEntitlement, toMillis } = require("./entitlementService");
 
-const ORDERS_COLLECTION = "lemonSqueezyOrders";
-const SUBSCRIPTIONS_COLLECTION = "lemonSqueezySubscriptions";
+const ORDERS_COLLECTION = "polarOrders";
+const SUBSCRIPTIONS_COLLECTION = "polarSubscriptions";
 
-// Lemon Squeezy retries webhook deliveries and lets operators resend them from
-// the dashboard, so everything here must tolerate duplicates and reordering.
-// Orders (lifetime, and legacy credit packs) are deduped once per order id.
-// Subscription events are idempotent state-syncs: replaying one re-writes the
-// same state, and the per-subscription updated_at guard drops stale deliveries.
+// Polar retries webhook deliveries and lets operators resend them from the
+// dashboard, so everything here must tolerate duplicates and reordering.
+// Lifetime orders are deduped once per order id. Subscription events are
+// idempotent state-syncs: replaying one re-writes the same state, and the
+// per-subscription updatedAt guard drops stale deliveries. This module is
+// provider-neutral — the caller computes planExpiresAt from the provider's
+// fields and passes it in.
 
 function mintedUserDefaults() {
   return {
@@ -19,31 +21,15 @@ function mintedUserDefaults() {
   };
 }
 
-// Maps a Lemon Squeezy subscription status to when the entitlement lapses.
-// past_due keeps renews_at, which is already in the past by then — access
-// lapses at the failed renewal (fail-closed); recovery arrives later as a
-// subscription_updated with status active and a fresh renews_at.
-function mapStatusToExpiry(status, renewsAt, endsAt, updatedAt) {
-  if (["active", "on_trial", "past_due", "paused"].includes(status)) {
-    return renewsAt ?? endsAt ?? updatedAt;
-  }
-  if (status === "cancelled") {
-    // Grace: access runs until the end of the paid period.
-    return endsAt ?? renewsAt ?? updatedAt;
-  }
-  // expired, unpaid, anything unknown: a past timestamp ⇒ not entitled.
-  return endsAt ?? updatedAt;
-}
-
 // Upserts the plan state a subscription event describes. One transaction over
-// the subscription mapping doc + the user doc.
+// the subscription mapping doc + the user doc. planExpiresAt is precomputed by
+// the caller (null/past ⇒ the subscription no longer entitles).
 async function applySubscriptionState({
   uid,
   subscriptionId,
   planId,
   status,
-  renewsAt,
-  endsAt,
+  planExpiresAt,
   updatedAt,
   raw = {},
 }) {
@@ -54,8 +40,8 @@ async function applySubscriptionState({
     const subSnap = await tx.get(subRef);
     const subData = subSnap.exists ? subSnap.data() : {};
 
-    // custom_data can be absent on events for subscriptions created outside
-    // the app; fall back to the mapping doc from earlier events.
+    // metadata/external_customer_id can be absent on events for subscriptions
+    // created outside the app; fall back to the mapping doc from earlier events.
     const resolvedUid = uid || subData.uid;
     if (!resolvedUid) {
       return { applied: false, reason: "NO_UID" };
@@ -65,9 +51,9 @@ async function applySubscriptionState({
     const userSnap = await tx.get(userRef);
     const userData = userSnap.exists ? userSnap.data() : {};
 
-    // Out-of-order guard: updated_at is monotone per subscription. Strictly
-    // older than what we already applied ⇒ a late retry of an old state; skip.
-    // Equal re-applies the same state (idempotent).
+    // Out-of-order guard: updatedAt (Polar's modified_at) is monotone per
+    // subscription. Strictly older than what we already applied ⇒ a late retry
+    // of an old state; skip. Equal re-applies the same state (idempotent).
     const prevUpdatedMs = toMillis(subData.updatedAt);
     const incomingUpdatedMs = toMillis(updatedAt);
     if (prevUpdatedMs && incomingUpdatedMs && incomingUpdatedMs < prevUpdatedMs) {
@@ -80,8 +66,7 @@ async function applySubscriptionState({
         uid: resolvedUid,
         planId,
         status,
-        renewsAt: renewsAt ?? null,
-        endsAt: endsAt ?? null,
+        planExpiresAt: planExpiresAt ?? null,
         updatedAt,
         lastEventAt: FieldValue.serverTimestamp(),
         ...raw,
@@ -94,18 +79,21 @@ async function applySubscriptionState({
     if (userData.plan === "lifetime") {
       tx.set(
         userRef,
-        { subscriptionId: String(subscriptionId), subscriptionStatus: status },
+        {
+          subscriptionId: String(subscriptionId),
+          subscriptionStatus: status,
+          ...(raw.polarCustomerId ? { polarCustomerId: raw.polarCustomerId } : {}),
+        },
         { merge: true }
       );
       return { applied: true };
     }
 
-    const newExpiresAt = mapStatusToExpiry(status, renewsAt, endsAt, updatedAt);
-    const newEntitles = Boolean(toMillis(newExpiresAt) > Date.now());
+    const newEntitles = Boolean(toMillis(planExpiresAt) > Date.now());
 
-    // Cross-subscription guard: a late event from an OLD subscription (e.g.
-    // its "expired" arriving after the user already started a new one) must
-    // not clobber the new subscription's access.
+    // Cross-subscription guard: a late event from an OLD subscription (e.g. its
+    // "revoked" arriving after the user already started a new one) must not
+    // clobber the new subscription's access.
     if (
       userData.subscriptionId &&
       userData.subscriptionId !== String(subscriptionId) &&
@@ -120,10 +108,11 @@ async function applySubscriptionState({
       {
         ...(userSnap.exists ? {} : mintedUserDefaults()),
         plan: planId,
-        planExpiresAt: newExpiresAt ?? null,
+        planExpiresAt: planExpiresAt ?? null,
         subscriptionId: String(subscriptionId),
         subscriptionStatus: status,
         planUpdatedAt: updatedAt,
+        ...(raw.polarCustomerId ? { polarCustomerId: raw.polarCustomerId } : {}),
       },
       { merge: true }
     );
@@ -131,7 +120,7 @@ async function applySubscriptionState({
   });
 }
 
-// Activates lifetime access exactly once per Lemon Squeezy order id.
+// Activates lifetime access exactly once per Polar order id.
 async function activateLifetimeOnce({ uid, orderId, meta = {} }) {
   const db = getFirebaseFirestore();
   const orderRef = db.collection(ORDERS_COLLECTION).doc(String(orderId));
@@ -152,6 +141,7 @@ async function activateLifetimeOnce({ uid, orderId, meta = {} }) {
         planExpiresAt: null,
         planUpdatedAt: FieldValue.serverTimestamp(),
         lifetimeOrderId: String(orderId),
+        ...(meta.polarCustomerId ? { polarCustomerId: meta.polarCustomerId } : {}),
       },
       { merge: true }
     );
@@ -166,9 +156,7 @@ async function activateLifetimeOnce({ uid, orderId, meta = {} }) {
   });
 }
 
-// Single entry point for order_refunded. Branches on what the stored order doc
-// says, which keeps refunds of legacy credit-pack orders (docs with .credits)
-// working after the switch to plans.
+// Revokes a refunded lifetime order, once, by order id.
 async function revokeOrderOnce({ orderId }) {
   const db = getFirebaseFirestore();
   const orderRef = db.collection(ORDERS_COLLECTION).doc(String(orderId));
@@ -187,38 +175,26 @@ async function revokeOrderOnce({ orderId }) {
     const userSnap = await tx.get(userRef);
     const userData = userSnap.exists ? userSnap.data() : {};
 
-    if (order.type === "lifetime") {
-      // Only clear the plan if this order is what granted it; a live
-      // subscription re-establishes itself on its next webhook.
-      if (
-        userSnap.exists &&
-        userData.plan === "lifetime" &&
-        userData.lifetimeOrderId === String(orderId)
-      ) {
-        tx.set(
-          userRef,
-          {
-            plan: null,
-            planExpiresAt: null,
-            planUpdatedAt: FieldValue.serverTimestamp(),
-            lifetimeOrderId: null,
-          },
-          { merge: true }
-        );
-      }
-      tx.update(orderRef, { refundedAt: FieldValue.serverTimestamp() });
-      return { revoked: true };
-    }
-
-    // Legacy credit-pack order: claw the credits back, clamped so a
-    // spent-down balance never goes negative.
-    const current = userSnap.exists ? userData.tokensRemaining : 0;
-    const newBalance = Math.max(0, current - order.credits);
-    if (userSnap.exists) {
-      tx.update(userRef, { tokensRemaining: newBalance });
+    // Only clear the plan if this order is what granted it; a live subscription
+    // re-establishes itself on its next webhook.
+    if (
+      userSnap.exists &&
+      userData.plan === "lifetime" &&
+      userData.lifetimeOrderId === String(orderId)
+    ) {
+      tx.set(
+        userRef,
+        {
+          plan: null,
+          planExpiresAt: null,
+          planUpdatedAt: FieldValue.serverTimestamp(),
+          lifetimeOrderId: null,
+        },
+        { merge: true }
+      );
     }
     tx.update(orderRef, { refundedAt: FieldValue.serverTimestamp() });
-    return { revoked: true, newBalance };
+    return { revoked: true };
   });
 }
 

@@ -628,6 +628,50 @@ function inferCanonicalTarget(targetCandidate, kind) {
   }
 }
 
+function serializeCustomEntryDate(startDate, endDate) {
+  const start = sanitizeString(startDate) || '';
+  const end = sanitizeString(endDate) || '';
+  if (start && end) return `${start} – ${end}`;
+  return start || end || '';
+}
+
+// Flatten model-provided structured custom entries ({ heading, subheading,
+// startDate, endDate, bullets[] }) into canonically ordered lines
+// (heading → date → description → bullets). Keeping a single `lines`
+// representation means downstream inline-editing and per-line PDF toggles keep
+// working unchanged, while the model's date-to-entry association is preserved in
+// a clean order the renderer can group deterministically. Returns null when the
+// model produced no usable headed entries so callers fall back to raw lines and
+// never drop content on a malformed `entries` payload.
+function customEntriesToLines(entries) {
+  const list = ensureArray(entries);
+  if (!list.length) return null;
+
+  const lines = [];
+  let sawHeadedEntry = false;
+
+  list.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') return;
+
+    const heading =
+      sanitizeString(entry.heading) || sanitizeString(entry.title) || sanitizeString(entry.name);
+    const subheading = sanitizeString(entry.subheading) || sanitizeString(entry.description);
+    const date = serializeCustomEntryDate(entry.startDate, entry.endDate);
+    const bullets = normalizeBulletArray(entry.bullets || entry.highlights || entry.items);
+
+    if (heading) {
+      sawHeadedEntry = true;
+      lines.push(heading);
+    }
+    if (date) lines.push(date);
+    if (subheading) lines.push(subheading);
+    bullets.forEach((bullet) => lines.push(`• ${bullet}`));
+  });
+
+  if (!sawHeadedEntry || !lines.length) return null;
+  return lines;
+}
+
 function normalizeSectionBlocks(candidateSections) {
   return ensureArray(candidateSections)
     .map((section, index) => {
@@ -637,7 +681,7 @@ function normalizeSectionBlocks(candidateSections) {
       const kind = inferSectionKind(section.kind, title);
       const canonicalTarget = inferCanonicalTarget(section.canonicalTarget, kind);
 
-      const lines = Array.isArray(section.lines)
+      let lines = Array.isArray(section.lines)
         ? normalizeStringArray(section.lines)
         : typeof section.content === 'string'
           ? section.content
@@ -645,6 +689,11 @@ function normalizeSectionBlocks(candidateSections) {
               .map((line) => sanitizeString(line))
               .filter(Boolean)
           : [];
+
+      if (kind === 'custom') {
+        const structuredLines = customEntriesToLines(section.entries);
+        if (structuredLines) lines = structuredLines;
+      }
 
       if (!lines.length) return undefined;
 

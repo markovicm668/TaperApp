@@ -11,7 +11,7 @@ const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
 const applicationsRoute = require("./routes/applications");
 const billingRoute = require("./routes/billing");
-const lemonWebhookRoute = require("./routes/lemonWebhook");
+const polarWebhookRoute = require("./routes/polarWebhook");
 const requireAuth = require("./middleware/requireAuth");
 const chargeAnalysis = require("./middleware/chargeAnalysis");
 const requireAnalyzeEligibility = require("./middleware/requireAnalyzeEligibility");
@@ -48,14 +48,14 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-// The Lemon Squeezy webhook must be mounted BEFORE the global express.json()
-// below: its HMAC signature is computed over the exact raw body bytes, so the
-// route needs req.body as an untouched Buffer. Any body-consuming middleware
-// added above this line would silently break signature verification.
+// The Polar webhook must be mounted BEFORE the global express.json() below:
+// its Standard Webhooks signature is computed over the exact raw body bytes, so
+// the route needs req.body as an untouched Buffer. Any body-consuming
+// middleware added above this line would silently break signature verification.
 app.use(
-  "/webhooks/lemonsqueezy",
+  "/webhooks/polar",
   express.raw({ type: "*/*" }),
-  lemonWebhookRoute
+  polarWebhookRoute
 );
 app.use(express.json({ limit: "1mb" }));
 

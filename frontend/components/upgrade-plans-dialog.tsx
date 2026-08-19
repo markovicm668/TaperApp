@@ -16,7 +16,7 @@ import { InviteFriendPanel } from '@/components/invite-friend-panel';
 import { track } from '@/lib/analytics';
 import { createCheckout, fetchPortalUrl, fetchUserProfile, type PlanId } from '@/lib/api';
 import { PLANS, PLAN_LABEL } from '@/lib/billing';
-import { openLemonCheckout } from '@/lib/lemonsqueezy';
+import { openPolarCheckout } from '@/lib/polar';
 import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { cn } from '@/lib/utils';
@@ -102,7 +102,7 @@ export function UpgradePlansDialog({
     setPurchasing(true);
     try {
       const { url } = await createCheckout(planId);
-      await openLemonCheckout(url, {
+      await openPolarCheckout(url, {
         onSuccess: () => {
           track('plan_purchase_completed', { plan: planId, source });
           toast.success('Payment received', { description: 'Activating your plan…' });

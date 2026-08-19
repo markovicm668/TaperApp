@@ -89,6 +89,7 @@ Task:
   - languages[] (language, fluency)
 - Include sectionOrder if confidently determined; otherwise leave empty.
 - customSections are ONLY for content under a genuine non-canonical heading (e.g. Volunteering, Certifications, Publications, Interests). Do NOT create a custom / "Unstructured" / "Other" section for bullets you have mapped into canonical sections. If a block of bullets is detached from its heading in the source text (common with PDF extraction), map each bullet to the correct canonical entry by context and do NOT also emit it as a customSection. Never output the same line in both a canonical section and a customSection.
+- When a custom section lists dated entries (e.g. Training, Certifications, Courses, Volunteering — each with an organization/title, an optional description, an optional date range, and bullets), ALSO populate an "entries" array on that section: [{ heading, subheading, startDate, endDate, bullets[] }]. Associate each date with the entry it belongs to even when the source text places the date on a separate line away from its heading (common with PDF extraction). Still fill "lines" with the raw content. For custom sections that are flat lists or prose with no per-entry structure (e.g. Interests), omit "entries" and use "lines" only.
 - Preserve original bullet meaning and ordering.
 - Never invent achievements, employers, dates, or credentials.
 - Unknown fields must be omitted or empty.
@@ -109,7 +110,10 @@ Output schema (JSON):
       "title": "string",
       "kind": "header | summary | work | projects | skills | education | awards | languages | custom",
       "canonicalTarget": "summary | work | projects | skills | education | awards | languages | none",
-      "lines": ["string"]
+      "lines": ["string"],
+      "entries": [
+        { "heading": "string", "subheading": "string", "startDate": "string", "endDate": "string", "bullets": ["string"] }
+      ]
     }
   ],
   "resumeData": {
@@ -209,7 +213,10 @@ Output schema (JSON):
       "title": "string",
       "kind": "custom",
       "canonicalTarget": "none",
-      "lines": ["string"]
+      "lines": ["string"],
+      "entries": [
+        { "heading": "string", "subheading": "string", "startDate": "string", "endDate": "string", "bullets": ["string"] }
+      ]
     }
   ],
   "notes": ["string"]

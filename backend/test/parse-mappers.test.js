@@ -217,3 +217,81 @@ test('buildParsedPayload keeps genuine custom sections that do not duplicate can
   assert.ok(custom, 'volunteering section should be retained');
   assert.deepEqual(custom.lines, ['Organized local coding workshops for students']);
 });
+
+test('buildParsedPayload serializes structured custom entries into canonical lines', () => {
+  const payload = buildParsedPayload({
+    resumeCandidate: {},
+    sectionBlocks: [
+      {
+        id: 'section-training',
+        title: 'Training',
+        kind: 'custom',
+        canonicalTarget: 'none',
+        // Raw lines are in the messy extraction order, but the model also
+        // supplied structured entries with dates associated to each heading.
+        lines: ['Route Academy', 'jumbled raw fallback'],
+        entries: [
+          {
+            heading: 'Route Academy',
+            subheading: '9-month Diploma in Full Stack Web Development.',
+            startDate: '07/2021',
+            endDate: '03/2022',
+            bullets: ['Acquired expertise in frontend development.'],
+          },
+          {
+            heading: 'Resala Organization',
+            subheading: 'Web Design Training.',
+            startDate: '10/2020',
+            endDate: '03/2021',
+            bullets: ['HTML, HTML 5, CSS, CSS3, Bootstrap 5.'],
+          },
+        ],
+      },
+    ],
+    resumeText: 'Example raw text',
+    inputType: 'text',
+    parserName: 'test-parser',
+  });
+
+  const custom = (payload.customSections || []).find(
+    (section) => section.id === 'section-training'
+  );
+  assert.ok(custom, 'training section should be retained');
+  // Structured entries win over raw lines, in heading → date → description → bullets order.
+  assert.deepEqual(custom.lines, [
+    'Route Academy',
+    '07/2021 – 03/2022',
+    '9-month Diploma in Full Stack Web Development.',
+    '• Acquired expertise in frontend development.',
+    'Resala Organization',
+    '10/2020 – 03/2021',
+    'Web Design Training.',
+    '• HTML, HTML 5, CSS, CSS3, Bootstrap 5.',
+  ]);
+});
+
+test('buildParsedPayload falls back to raw lines when custom entries are unusable', () => {
+  const payload = buildParsedPayload({
+    resumeCandidate: {},
+    sectionBlocks: [
+      {
+        id: 'section-training',
+        title: 'Training',
+        kind: 'custom',
+        canonicalTarget: 'none',
+        lines: ['Route Academy', 'Web Design Training.'],
+        // No heading on any entry -> not trustworthy, keep raw lines.
+        entries: [{ bullets: ['stray bullet'] }],
+      },
+    ],
+    resumeText: 'Example raw text',
+    inputType: 'text',
+    parserName: 'test-parser',
+  });
+
+  const custom = (payload.customSections || []).find(
+    (section) => section.id === 'section-training'
+  );
+  assert.ok(custom, 'training section should be retained');
+  assert.deepEqual(custom.lines, ['Route Academy', 'Web Design Training.']);
+});

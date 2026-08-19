@@ -1,14 +1,16 @@
 const express = require("express");
-const lemonSqueezyService = require("../services/lemonSqueezyService");
+const polarService = require("../services/polarService");
 const { createPlans } = require("../config/plans");
 const { getUserAccess: realGetUserAccess } = require("../services/entitlementService");
+const { getEnv } = require("../config/env");
 const { isAnonymousRequest } = require("../utils/authClaims");
 
 function createBillingRouter({
-  createCheckout = lemonSqueezyService.createCheckout,
-  getSubscription = lemonSqueezyService.getSubscription,
+  createCheckout = polarService.createCheckout,
+  getCustomerPortalUrl = polarService.getCustomerPortalUrl,
   getUserAccess = realGetUserAccess,
   getPlans = () => createPlans(),
+  getAppOrigin = () => getEnv("APP_ORIGIN", { required: false }) || getEnv("CORS_ALLOWED_ORIGIN", { required: false }),
 } = {}) {
   const router = express.Router();
 
@@ -28,10 +30,8 @@ function createBillingRouter({
           error: { code: "UNKNOWN_PLAN", message: "Unknown plan." },
         });
       }
-      if (!plan.variantId) {
-        console.error(
-          `-> Billing misconfigured: no Lemon Squeezy variant id for plan "${plan.id}".`
-        );
+      if (!plan.productId) {
+        console.error(`-> Billing misconfigured: no Polar product id for plan "${plan.id}".`);
         return res.status(500).json({
           error: {
             code: "BILLING_NOT_CONFIGURED",
@@ -40,15 +40,18 @@ function createBillingRouter({
         });
       }
 
+      const appOrigin = getAppOrigin();
       let checkout;
       try {
         checkout = await createCheckout({
-          variantId: plan.variantId,
+          productId: plan.productId,
           uid: req.auth.uid,
           email: req.auth.email,
+          embedOrigin: appOrigin || undefined,
+          successUrl: appOrigin ? `${appOrigin}/settings` : undefined,
         });
       } catch (err) {
-        if (err.code === "LEMONSQUEEZY_API_ERROR" || err.code === "MISSING_ENV") {
+        if (err.code === "POLAR_API_ERROR" || err.code === "MISSING_ENV") {
           console.error("-> Checkout creation failed:", err);
           return res.status(502).json({
             error: {
@@ -69,8 +72,8 @@ function createBillingRouter({
     }
   });
 
-  // Returns a fresh Lemon Squeezy customer-portal URL (they are signed and
-  // expiring, so one is fetched per click — never stored).
+  // Returns a fresh Polar customer-portal URL (short-lived, so fetched per
+  // click and never stored).
   router.get("/portal", async (req, res) => {
     try {
       if (isAnonymousRequest(req)) {
@@ -80,17 +83,17 @@ function createBillingRouter({
       }
 
       const access = await getUserAccess(req.auth.uid);
-      if (!access.subscriptionId) {
+      if (!access.polarCustomerId) {
         return res.status(404).json({
           error: { code: "NO_SUBSCRIPTION", message: "No subscription to manage." },
         });
       }
 
-      let subscription;
+      let url;
       try {
-        subscription = await getSubscription(access.subscriptionId);
+        url = await getCustomerPortalUrl(access.polarCustomerId);
       } catch (err) {
-        if (err.code === "LEMONSQUEEZY_API_ERROR" || err.code === "MISSING_ENV") {
+        if (err.code === "POLAR_API_ERROR" || err.code === "MISSING_ENV") {
           console.error("-> Portal fetch failed:", err);
           return res.status(502).json({
             error: {
@@ -102,7 +105,7 @@ function createBillingRouter({
         throw err;
       }
 
-      if (!subscription.customerPortalUrl) {
+      if (!url) {
         return res.status(502).json({
           error: {
             code: "PORTAL_FAILED",
@@ -111,7 +114,7 @@ function createBillingRouter({
         });
       }
 
-      return res.status(200).json({ url: subscription.customerPortalUrl });
+      return res.status(200).json({ url });
     } catch (err) {
       console.error("-> Billing portal error:", err);
       return res.status(500).json({

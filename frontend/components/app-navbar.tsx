@@ -210,7 +210,7 @@ export function AppNavbar({
                         aria-label="Invite friends"
                         onClick={() => track('nav_invite_clicked')}
                       >
-                        Get more credits
+                        {entitled ? 'Invite a friend' : 'Get more credits'}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-md">

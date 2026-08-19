@@ -643,6 +643,94 @@ function renderLinesAsBlock(lines) {
   return fragments.join('');
 }
 
+const CUSTOM_DATE_TOKEN = String.raw`(?:present|current|(?:\d{1,2}\/)?\d{4})`;
+// Matches a line that is *entirely* a date or date range, e.g. "07/2021 – 03/2022",
+// "2012 – 2016", or "03/2026 - Present". Used to detach a date that PDF extraction
+// stranded on its own line from the entry heading it belongs to.
+const STANDALONE_DATE_RANGE_RE = new RegExp(
+  `^\\s*${CUSTOM_DATE_TOKEN}(?:\\s*[-–—]\\s*${CUSTOM_DATE_TOKEN})?\\s*$`,
+  'i'
+);
+const CUSTOM_BULLET_LINE_RE = /^\s*(?:[-*•●▪◦–—−]|\(?\d{1,3}[.)])/;
+
+function stripCustomBullet(text) {
+  return toText(text)
+    .replace(/^\s*(?:[-*•●▪◦–—−]|\(?\d{1,3}[.)])\s*/, '')
+    .trim();
+}
+
+// Group a custom section's flat lines into dated entries. Handles the common
+// two-column PDF-extraction artifact where an entry's date lands on its own
+// line *after* that entry's bullets: a standalone date attaches to the currently
+// open entry, and a plain-text line only starts a new entry once the current one
+// already has bullets (so the line right after a heading reads as its description).
+function groupCustomLinesIntoEntries(lines) {
+  const entries = [];
+  let current = null;
+
+  const openEntry = (headline) => {
+    current = { headline: headline || '', subheading: '', dateRange: '', bullets: [] };
+    entries.push(current);
+  };
+
+  asArray(lines)
+    .map((line) => toText(line).trim())
+    .filter(isNonEmptyText)
+    .forEach((line) => {
+      if (STANDALONE_DATE_RANGE_RE.test(line)) {
+        if (!current) openEntry('');
+        if (!current.dateRange) current.dateRange = line;
+        return;
+      }
+
+      if (CUSTOM_BULLET_LINE_RE.test(line)) {
+        if (!current) openEntry('');
+        const bullet = stripCustomBullet(line);
+        if (bullet) current.bullets.push(bullet);
+        return;
+      }
+
+      // Plain text line: a new heading if the current entry already has bullets,
+      // otherwise the heading (first line) or description (second line) of the
+      // entry currently being built.
+      if (!current || current.bullets.length > 0) {
+        openEntry(line);
+        return;
+      }
+      if (!current.headline) {
+        current.headline = line;
+        return;
+      }
+      current.subheading = current.subheading ? `${current.subheading} ${line}` : line;
+    });
+
+  return entries;
+}
+
+// Render grouped custom entries with the same markup/styling as education
+// entries (heading on the left, date on the right, description sub-row, bullets).
+function renderStructuredCustomSection(entries) {
+  return asArray(entries)
+    .map((entry) => {
+      const headline = toText(entry.headline);
+      const dateRange = toText(entry.dateRange);
+      const subheading = toText(entry.subheading);
+      return `<div class="education-item">
+        <div class="row">
+          <div class="row-left">${escapeHtml(headline)}</div>
+          ${dateRange ? `<div class="row-right">${escapeHtml(dateRange)}</div>` : ''}
+        </div>
+        ${
+          subheading
+            ? `<div class="sub-row"><div class="sub-left">${escapeHtml(subheading)}</div></div>`
+            : ''
+        }
+        ${renderDashList(entry.bullets)}
+      </div>`;
+    })
+    .join('');
+}
+
 function renderParagraphs(text) {
   const paragraphs = toText(text)
     .split(/\n{2,}/)
@@ -1211,7 +1299,12 @@ function generateResumeHtml(resume, options = {}) {
       } else if (section.kind === 'languages') {
         contentHtml = preferLines ? linesHtml : languagesHtml || linesHtml;
       } else {
-        contentHtml = linesHtml;
+        // Custom section: render dated entries structurally (like education);
+        // fall back to flat lines when there are no entry dates to anchor on.
+        const customEntries = groupCustomLinesIntoEntries(section.lines);
+        contentHtml = customEntries.some((entry) => entry.dateRange)
+          ? renderStructuredCustomSection(customEntries)
+          : linesHtml;
       }
 
       if (!isNonEmptyText(contentHtml)) return;
