@@ -7,15 +7,12 @@ const { createPlans } = require("../config/plans");
 
 // Polar signs deliveries with the Standard Webhooks spec (base64 HMAC-SHA256
 // over `${webhook-id}.${webhook-timestamp}.${body}`). The `standardwebhooks`
-// lib verifies it and returns the parsed event, or throws.
+// lib verifies it and returns the parsed event, or throws. This mirrors
+// Polar's own SDK validateEvent exactly: the raw dashboard secret is
+// UTF-8 → base64 encoded (no whsec_ prefix) before being handed to the verifier.
 function defaultVerifyEvent(rawBody, headers, secret) {
-  // standardwebhooks expects a base64 secret (optionally whsec_-prefixed).
-  // Polar's dashboard secret is either already whsec_-prefixed or a plain
-  // string; normalize both. (Confirm against a real sandbox delivery.)
-  const normalized = secret.startsWith("whsec_")
-    ? secret
-    : Buffer.from(secret).toString("base64");
-  const wh = new Webhook(normalized);
+  const base64Secret = Buffer.from(secret, "utf-8").toString("base64");
+  const wh = new Webhook(base64Secret);
   return wh.verify(rawBody, headers);
 }
 
