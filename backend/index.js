@@ -10,6 +10,7 @@ const parsePdfRoute = require("./routes/parsePdf");
 const exportRoute = require("./routes/export");
 const userRoute = require("./routes/user");
 const applicationsRoute = require("./routes/applications");
+const savedResumesRoute = require("./routes/savedResumes");
 const billingRoute = require("./routes/billing");
 const polarWebhookRoute = require("./routes/polarWebhook");
 const requireAuth = require("./middleware/requireAuth");
@@ -80,6 +81,10 @@ app.use("/parse-pdf", requireAuth, requireAnalyzeEligibility(1), parsePdfRoute);
 // applied inside the router so the gate fires only for the paid action.
 app.use("/export", exportRoute);
 app.use("/applications", requireAuth, applicationsRoute);
+// Saved resumes are free to create and reuse: the payload stored here is the
+// one the parse step already produced, and reusing it still runs through
+// /analyze, which charges exactly as it does for a fresh upload.
+app.use("/saved-resumes", requireAuth, savedResumesRoute);
 // Anonymous users can't buy a plan (the route 403s); entitlement is granted by
 // the Lemon Squeezy webhook above, never by this route.
 app.use("/billing", requireAuth, billingRoute);

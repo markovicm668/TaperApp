@@ -10,6 +10,8 @@ import type {
   JobDescription,
   ResumePdfPayload,
   ResumeTemplateId,
+  SavedResumeDetail,
+  SavedResumeSummary,
   ScoreBreakdown,
 } from './types';
 import type { AiParsedResumePayloadV2 } from '@resume-scanner/resume-contract';
@@ -633,5 +635,75 @@ export async function deleteApplication(id: string): Promise<void> {
     `/applications/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
     'Failed to delete application'
+  );
+}
+
+// --- Saved resumes -------------------------------------------------------
+// Free to create and reuse. Reusing one skips the /parse round-trip entirely
+// (its payload goes straight to /analyze), so a repeat analysis costs one
+// fewer AI call and still charges exactly as a fresh upload does.
+
+export async function createSavedResume(payload: {
+  parsed: AiParsedResumePayloadV2;
+  label?: string;
+}): Promise<{ id: string; label: string }> {
+  const res = await fetchWithAuth(
+    '/saved-resumes',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'Failed to save resume'
+  );
+  const json = await res.json();
+  return json.savedResume as { id: string; label: string };
+}
+
+export async function listSavedResumes(): Promise<SavedResumeSummary[]> {
+  const res = await fetchWithAuth(
+    '/saved-resumes',
+    { method: 'GET' },
+    'Failed to load saved resumes'
+  );
+  const json = await res.json();
+  return (json.savedResumes ?? []) as SavedResumeSummary[];
+}
+
+export async function getSavedResume(id: string): Promise<SavedResumeDetail> {
+  const res = await fetchWithAuth(
+    `/saved-resumes/${encodeURIComponent(id)}`,
+    { method: 'GET' },
+    'Failed to load saved resume'
+  );
+  const json = await res.json();
+  if (!json?.savedResume) {
+    throw new Error('Invalid API response format: missing savedResume.');
+  }
+  return json.savedResume as SavedResumeDetail;
+}
+
+export async function renameSavedResume(
+  id: string,
+  label: string
+): Promise<SavedResumeSummary> {
+  const res = await fetchWithAuth(
+    `/saved-resumes/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    },
+    'Failed to rename saved resume'
+  );
+  const json = await res.json();
+  return json.savedResume as SavedResumeSummary;
+}
+
+export async function deleteSavedResume(id: string): Promise<void> {
+  await fetchWithAuth(
+    `/saved-resumes/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+    'Failed to delete saved resume'
   );
 }

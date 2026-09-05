@@ -18,6 +18,18 @@ export interface ResumeInput {
   content: string;
   fileName?: string;
   file?: File;
+  /** Set when this input came from the user's saved resumes. */
+  savedResumeId?: string;
+  /**
+   * Present only for a saved resume: the payload the parser produced when it
+   * was first uploaded. When set, the parse step is skipped and this goes
+   * straight to /analyze, which already accepts a pre-parsed payload.
+   */
+  parsed?: AiParsedResumePayloadV2;
+  /** The user opted in at upload time to keep this resume for future analyses. */
+  saveForLater?: boolean;
+  /** Name the user gave the resume in the save prompt. */
+  saveLabel?: string;
 }
 
 export interface JobDescription {
@@ -159,6 +171,21 @@ export interface ApplicationDetail extends ApplicationSummary {
   // the edited payload and rehydration must not re-apply AI bullet changes.
   editedBulletChanges: BulletChange[] | null;
   lastEditedAt: string | null;
+}
+
+export interface SavedResumeSummary {
+  id: string;
+  label: string;
+  fileName: string | null;
+  inputType: ResumeInput['type'];
+  wordCount: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SavedResumeDetail extends SavedResumeSummary {
+  rawText: string;
+  parsed: AiParsedResumePayloadV2 | null;
 }
 
 export interface UserPreferences {

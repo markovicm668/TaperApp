@@ -1,24 +1,53 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { Check, Clipboard, FileText, FileUp, Sparkles, Upload, X } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { BookmarkCheck, Check, Clipboard, FileText, FileUp, Loader2, Sparkles, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { sampleResume } from '@/lib/api';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { getSavedResume, listSavedResumes, sampleResume } from '@/lib/api';
+import { useAuth } from '@/lib/auth/useAuth';
 import { track } from '@/lib/analytics';
 import { AdminOnly } from '@/components/admin-only';
+import type { ResumeInput, SavedResumeSummary } from '@/lib/types';
 
 type InputTab = 'text' | 'pdf';
 
-type ResumeChangePayload = { type: 'file' | 'text' | 'linkedin'; content: string; fileName?: string; file?: File } | null;
+type ResumeChangePayload = ResumeInput | null;
 
 const MAX_PDF_SIZE = 5 * 1024 * 1024;
+// Mirrors MAX_SAVED_RESUMES in backend/services/savedResumeService.js. The
+// server is the authority (it 409s past the cap); this only drives the hint.
+const MAX_SAVED_RESUMES = 5;
 
 interface ResumeInputCardProps {
   onResumeChange: (data: ResumeChangePayload) => void;
   hideSampleButton?: boolean;
   /** Tailwind min-height class for the input area (textarea / drop zone). */
   inputMinHeightClassName?: string;
+}
+
+const DEFAULT_TEXT_LABEL = 'My resume';
+
+/** "Maya_Kowalski_2026.pdf" -> "Maya_Kowalski_2026" */
+function defaultLabelFromFileName(fileName: string): string {
+  return fileName.replace(/\.pdf$/i, '').trim() || DEFAULT_TEXT_LABEL;
 }
 
 function formatFileSize(bytes: number): string {
@@ -39,6 +68,21 @@ export function ResumeInputCard({
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Saved resumes are a signed-in-only affordance. `user` is null for the
+  // anonymous Firebase sessions the landing page mints (see AuthProvider), so
+  // this whole block stays inert there without any extra prop threading.
+  const { user } = useAuth();
+  const [savedResumes, setSavedResumes] = useState<SavedResumeSummary[]>([]);
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
+  const [loadingSavedId, setLoadingSavedId] = useState<string | null>(null);
+  // `saveLabel` doubles as the consent flag: non-null means the user confirmed
+  // the save prompt, and it holds the name they chose.
+  const [saveLabel, setSaveLabel] = useState<string | null>(null);
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [draftLabel, setDraftLabel] = useState('');
+
+  const atSavedLimit = savedResumes.length >= MAX_SAVED_RESUMES;
+
   // Fire resume_uploaded from the single funnel here so every consumer (the
   // signed-in /analyze page and the guest landing page) emits it identically.
   // Deduped by input type + file name so paste keystrokes don't re-fire.
@@ -50,7 +94,7 @@ export function ResumeInputCard({
         trackedResumeKeyRef.current = null;
         return;
       }
-      const key = `${data.type}:${data.fileName ?? ''}`;
+      const key = `${data.type}:${data.fileName ?? ''}:${data.savedResumeId ?? ''}`;
       if (trackedResumeKeyRef.current === key) return;
       trackedResumeKeyRef.current = key;
       track('resume_uploaded', {
@@ -58,21 +102,50 @@ export function ResumeInputCard({
         has_file: Boolean(data.file),
         file_name: data.fileName || null,
         char_count: data.content.length,
+        from_saved_resume: Boolean(data.savedResumeId),
       });
     },
     [onResumeChange]
   );
 
+  useEffect(() => {
+    if (!user) {
+      setSavedResumes([]);
+      setSelectedSavedId(null);
+      return;
+    }
+
+    let cancelled = false;
+    listSavedResumes()
+      .then(resumes => {
+        if (!cancelled) setSavedResumes(resumes);
+      })
+      .catch(err => {
+        // Non-fatal: the picker just stays hidden and upload still works.
+        console.error('Failed to load saved resumes:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const handlePastedTextChange = useCallback(
     (text: string) => {
       setPastedText(text);
+      setSelectedSavedId(null);
       if (text.trim()) {
-        reportResume({ type: 'text', content: text });
+        reportResume({
+          type: 'text',
+          content: text,
+          saveForLater: saveLabel !== null,
+          ...(saveLabel ? { saveLabel } : {}),
+        });
       } else {
         reportResume(null);
       }
     },
-    [reportResume]
+    [reportResume, saveLabel]
   );
 
   const insertSampleResume = useCallback(() => {
@@ -94,9 +167,21 @@ export function ResumeInputCard({
       }
 
       setSelectedFile(file);
+      setSelectedSavedId(null);
+      // A new file is a different resume, so any name chosen for the previous
+      // one is dropped rather than silently reused.
+      setSaveLabel(null);
       reportResume({ type: 'file', content: '', fileName: file.name, file });
+
+      // Uploading is the discrete moment the prompt belongs to. Pasted text has
+      // no such moment (it would fire mid-keystroke), so that path opens the
+      // same dialog from the button below instead.
+      if (user && !atSavedLimit) {
+        setDraftLabel(defaultLabelFromFileName(file.name));
+        setSavePromptOpen(true);
+      }
     },
-    [reportResume]
+    [reportResume, user, atSavedLimit]
   );
 
   const handleFileSelect = useCallback(
@@ -121,13 +206,101 @@ export function ResumeInputCard({
   const handleRemoveFile = useCallback(() => {
     setSelectedFile(null);
     setFileError(null);
+    setSaveLabel(null);
     reportResume(null);
   }, [reportResume]);
+
+  // Picking a saved resume pulls its stored parse payload down with it. That
+  // payload is what lets useAnalyzeFlow skip the /parse round-trip entirely.
+  const handleSelectSaved = useCallback(
+    async (id: string) => {
+      setLoadingSavedId(id);
+      setFileError(null);
+      try {
+        const detail = await getSavedResume(id);
+        setSelectedSavedId(id);
+        setSelectedFile(null);
+        setPastedText('');
+        setSaveLabel(null);
+        reportResume({
+          type: detail.inputType,
+          content: detail.rawText,
+          fileName: detail.fileName ?? undefined,
+          savedResumeId: detail.id,
+          ...(detail.parsed ? { parsed: detail.parsed } : {}),
+        });
+        track('saved_resume_used', { saved_resume_id: id, input_type: detail.inputType });
+      } catch (err) {
+        console.error('Failed to load saved resume:', err);
+        setFileError('Could not load that saved resume. Please try again.');
+      } finally {
+        setLoadingSavedId(null);
+      }
+    },
+    [reportResume]
+  );
+
+  const handleClearSaved = useCallback(() => {
+    setSelectedSavedId(null);
+    reportResume(null);
+  }, [reportResume]);
+
+  const openSavePrompt = useCallback(() => {
+    setDraftLabel(
+      saveLabel ??
+        (selectedFile ? defaultLabelFromFileName(selectedFile.name) : DEFAULT_TEXT_LABEL)
+    );
+    setSavePromptOpen(true);
+  }, [saveLabel, selectedFile]);
+
+  // Re-report so the choice reaches the analyze flow immediately; the analytics
+  // dedupe key is unchanged, so this never re-fires resume_uploaded.
+  const reportWithSaveLabel = useCallback(
+    (nextLabel: string | null) => {
+      if (selectedFile) {
+        reportResume({
+          type: 'file',
+          content: '',
+          fileName: selectedFile.name,
+          file: selectedFile,
+          saveForLater: nextLabel !== null,
+          ...(nextLabel ? { saveLabel: nextLabel } : {}),
+        });
+      } else if (pastedText.trim()) {
+        reportResume({
+          type: 'text',
+          content: pastedText,
+          saveForLater: nextLabel !== null,
+          ...(nextLabel ? { saveLabel: nextLabel } : {}),
+        });
+      }
+    },
+    [reportResume, selectedFile, pastedText]
+  );
+
+  const handleConfirmSave = useCallback(() => {
+    const label = draftLabel.trim();
+    if (!label) return;
+    setSaveLabel(label);
+    setSavePromptOpen(false);
+    reportWithSaveLabel(label);
+  }, [draftLabel, reportWithSaveLabel]);
+
+  const handleCancelSave = useCallback(() => {
+    setSavePromptOpen(false);
+  }, []);
+
+  const handleUndoSave = useCallback(() => {
+    setSaveLabel(null);
+    reportWithSaveLabel(null);
+  }, [reportWithSaveLabel]);
 
   const switchTab = useCallback(
     (tab: InputTab) => {
       setActiveTab(tab);
       setFileError(null);
+      setSelectedSavedId(null);
+      setSaveLabel(null);
       if (tab === 'text') {
         setSelectedFile(null);
         if (pastedText.trim()) {
@@ -138,7 +311,12 @@ export function ResumeInputCard({
       } else {
         setPastedText('');
         if (selectedFile) {
-          reportResume({ type: 'file', content: '', fileName: selectedFile.name, file: selectedFile });
+          reportResume({
+            type: 'file',
+            content: '',
+            fileName: selectedFile.name,
+            file: selectedFile,
+          });
         } else {
           reportResume(null);
         }
@@ -180,6 +358,45 @@ export function ResumeInputCard({
             </AdminOnly>
           )}
         </div>
+
+        {/* Saved resume picker — signed-in users with at least one saved resume */}
+        {user && savedResumes.length > 0 && (
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="flex-shrink-0 text-[12px] font-medium text-muted-foreground">
+              Use a saved resume
+            </span>
+            <Select value={selectedSavedId ?? ''} onValueChange={handleSelectSaved}>
+              <SelectTrigger
+                className="h-8 flex-1 rounded-[7px] border-border bg-muted/40 text-[12px]"
+                aria-label="Use a saved resume"
+              >
+                <SelectValue placeholder="Select…" />
+              </SelectTrigger>
+              <SelectContent>
+                {savedResumes.map(resume => (
+                  <SelectItem key={resume.id} value={resume.id} className="text-[12px]">
+                    {resume.label}
+                    <span className="ml-2 text-muted-foreground">
+                      {resume.wordCount.toLocaleString()} words
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {loadingSavedId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            {selectedSavedId && !loadingSavedId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSaved}
+                className="h-8 w-8 flex-shrink-0 p-0"
+                aria-label="Clear saved resume selection"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Tab toggle */}
         <div className="flex gap-0.5 rounded-[10px] border border-border bg-muted/60 p-[3px]">
@@ -288,7 +505,99 @@ export function ResumeInputCard({
             />
           </div>
         )}
+
+        {/* Save-for-later, opt-in and signed-in only, and only for a freshly
+            supplied resume — a saved one is already stored. The write itself
+            happens after the parse step, so it costs no extra AI call. */}
+        {user && !selectedSavedId && (selectedFile || pastedText.trim()) && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-[10px] border border-border/70 bg-muted/40 px-3.5 py-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <BookmarkCheck
+                className={`h-4 w-4 flex-shrink-0 ${saveLabel ? 'text-primary' : 'text-muted-foreground'}`}
+              />
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[12.5px] font-medium text-foreground">
+                  {saveLabel ? `Saving as "${saveLabel}"` : 'Save this resume for future analyses'}
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                  {atSavedLimit
+                    ? `You've saved ${MAX_SAVED_RESUMES} resumes — remove one in Settings to save another.`
+                    : saveLabel
+                      ? 'Stored when you run your analysis.'
+                      : 'Reuse it next time without re-uploading. Free.'}
+                </p>
+              </div>
+            </div>
+            {saveLabel ? (
+              <div className="flex flex-shrink-0 items-center gap-1">
+                <Button variant="quiet" size="sm" onClick={openSavePrompt} className="h-7 text-[12px]">
+                  Rename
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleUndoSave}
+                  className="h-7 w-7 p-0"
+                  aria-label="Don't save this resume"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openSavePrompt}
+                disabled={atSavedLimit}
+                className="h-7 flex-shrink-0 text-[12px]"
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
+
+      <Dialog open={savePromptOpen} onOpenChange={setSavePromptOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save this resume?</DialogTitle>
+            <DialogDescription>
+              Give it a name so you can reuse it on future analyses without re-uploading.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="saved-resume-name">Name</Label>
+            <Input
+              id="saved-resume-name"
+              value={draftLabel}
+              onChange={e => setDraftLabel(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleConfirmSave();
+                }
+              }}
+              placeholder={DEFAULT_TEXT_LABEL}
+              maxLength={80}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {savedResumes.length} of {MAX_SAVED_RESUMES} slots used.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={handleCancelSave}>
+              Not now
+            </Button>
+            <Button onClick={handleConfirmSave} disabled={!draftLabel.trim()}>
+              Save resume
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

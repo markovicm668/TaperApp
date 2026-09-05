@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { analyzeResume, parseResume, parseResumePdf } from '@/lib/api';
+import { analyzeResume, createSavedResume, parseResume, parseResumePdf } from '@/lib/api';
 import { savePendingApplication } from '@/lib/analyze/pendingApplication';
 import { markFreeAnalysisUsed } from '@/lib/freeAnalysis';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
@@ -11,6 +11,7 @@ import { useResumeActions } from '@/lib/resume/store';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { useAuth } from '@/lib/auth/useAuth';
 import { incrementPeopleProperty, track } from '@/lib/analytics';
+import type { AiParsedResumePayloadV2 } from '@resume-scanner/resume-contract';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 type AnalyzeSource = 'landing' | 'analyze_page';
@@ -86,6 +87,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
         input_type: resumeData.type,
         has_file: Boolean(resumeData.file),
         jd_char_count: jobDescription.trim().length,
+        used_saved_resume: Boolean(resumeData.parsed),
       });
 
       setSourceInput({
@@ -103,19 +105,50 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
 
         // Step 1: Parse resume separately so the progress dialog
         // reflects real parse time (free; only the analysis step is billed).
-        const parseResult = resumeData.file
-          ? await parseResumePdf(resumeData.file)
-          : await parseResume({
-              resumeText: resumeData.content,
-              inputType: resumeData.type,
-              fileName: resumeData.fileName,
-            });
+        // A saved resume already carries the payload its first upload produced,
+        // so this round-trip is skipped entirely on reuse.
+        const parseResult: AiParsedResumePayloadV2 & { tokensRemaining?: number } = resumeData.parsed
+          ? resumeData.parsed
+          : resumeData.file
+            ? await parseResumePdf(resumeData.file)
+            : await parseResume({
+                resumeText: resumeData.content,
+                inputType: resumeData.type,
+                fileName: resumeData.fileName,
+              });
         setParsedPayload(parseResult);
         setParseDone(true);
 
+        // `tokensRemaining` is transport metadata from the parse response, not
+        // part of the resume. Strip it before anything persists or replays the
+        // payload, so a stale balance can't ride along inside a saved resume.
+        const { tokensRemaining: _parseTokens, ...parsedPayloadForSave } = parseResult;
+
+        // Persist the resume the user opted to keep. Deliberately fire-and-
+        // forget: this rides along on a parse that already happened, and a
+        // failure here must never take down the analysis the user paid for.
+        if (!resumeData.parsed && resumeData.saveForLater && user) {
+          void createSavedResume({
+            parsed: parsedPayloadForSave,
+            ...(resumeData.saveLabel ? { label: resumeData.saveLabel } : {}),
+          })
+            .then(({ label }) => {
+              track('saved_resume_created', { source, input_type: resumeData.type });
+              toast.success('Resume saved', {
+                description: `"${label}" is ready to reuse on your next analysis.`,
+              });
+            })
+            .catch((saveErr: unknown) => {
+              console.error('Failed to save resume:', saveErr);
+              toast.error('Could not save your resume', {
+                description:
+                  saveErr instanceof Error ? saveErr.message : 'Your analysis is unaffected.',
+              });
+            });
+        }
+
         // Step 2: Run full analysis (costs 1 token for authed users).
         // Pass the already-parsed resumeData so the backend skips re-parsing.
-        const { tokensRemaining: _parseTokens, ...parsedPayloadForSave } = parseResult;
         const { result, analysis, parsed, applicationId, tokensRemaining } = await analyzeResume(
           {
             type: resumeData.type,

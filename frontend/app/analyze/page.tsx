@@ -10,13 +10,14 @@ import { ResumeInputCard } from '@/components/resume-input-card';
 import { JobDescriptionCard } from '@/components/job-description-card';
 import { AnalysisProgress } from '@/components/analysis-progress';
 import { UpgradePlansDialog } from '@/components/upgrade-plans-dialog';
-import { parseResume, parseResumePdf } from '@/lib/api';
+import { createSavedResume, parseResume, parseResumePdf } from '@/lib/api';
 import { useAnalyzeFlow } from '@/lib/analyze/useAnalyzeFlow';
 import { analysisResultToSnapshot } from '@/lib/resume/mappers';
 import { useResumeActions } from '@/lib/resume/store';
 import { useAdmin } from '@/lib/auth/useAdmin';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { track } from '@/lib/analytics';
+import type { AiParsedResumePayloadV2 } from '@resume-scanner/resume-contract';
 import type { AnalysisResult, ResumeInput } from '@/lib/types';
 
 interface StatusPillProps {
@@ -105,19 +106,41 @@ export default function AnalyzePage() {
     });
 
     try {
-      const parseResultResponse = resumeData.file
-        ? await parseResumePdf(resumeData.file)
-        : await parseResume({
-            resumeText: resumeData.content,
-            inputType: resumeData.type,
-            fileName: resumeData.fileName,
-          });
+      // A saved resume already carries its parse payload, so skip the call.
+      const parseResultResponse: AiParsedResumePayloadV2 & { tokensRemaining?: number } =
+        resumeData.parsed
+        ? resumeData.parsed
+        : resumeData.file
+          ? await parseResumePdf(resumeData.file)
+          : await parseResume({
+              resumeText: resumeData.content,
+              inputType: resumeData.type,
+              fileName: resumeData.fileName,
+            });
 
       if (parseResultResponse.tokensRemaining !== undefined) {
         setTokensRemaining(parseResultResponse.tokensRemaining);
       }
 
       setParsedPayload(parseResultResponse);
+
+      // Same opt-in save as the full analyze flow; non-blocking by design.
+      if (!resumeData.parsed && resumeData.saveForLater) {
+        const { tokensRemaining: _parseTokens, ...parsedForSave } = parseResultResponse;
+        void createSavedResume({
+          parsed: parsedForSave,
+          ...(resumeData.saveLabel ? { label: resumeData.saveLabel } : {}),
+        })
+          .then(({ label }) => {
+            toast.success('Resume saved', {
+              description: `"${label}" is ready to reuse on your next analysis.`,
+            });
+          })
+          .catch(saveErr => {
+            console.error('Failed to save resume:', saveErr);
+            toast.error('Could not save your resume');
+          });
+      }
 
       const parseOnlyResult: AnalysisResult = {
         id: new Date().toISOString(),

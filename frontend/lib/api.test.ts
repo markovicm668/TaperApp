@@ -3,8 +3,13 @@ import assert from 'node:assert/strict';
 import {
   analyzeResume,
   configureApiAuth,
+  createSavedResume,
+  deleteSavedResume,
   exportResumePdf,
+  getSavedResume,
+  listSavedResumes,
   parseResume,
+  renameSavedResume,
   updateApplicationParsed,
 } from './api.ts';
 import type { ResumePdfPayload } from './types.ts';
@@ -403,4 +408,109 @@ test('analyzeResume maps skill add/remove and strips bracket prefixes', async ()
   assert.equal(added?.improved, '[CRM] Salesforce');
   assert.equal(removed?.id, 'skill-old-1');
   assert.equal(removed?.original, 'jQuery');
+});
+
+
+// --- Saved resumes -------------------------------------------------------
+
+const SAVED_PARSED = {
+  version: '2' as const,
+  resumeData: {
+    education: [],
+    work: [],
+    projects: [],
+    awards: [],
+    skills: [],
+    languages: [],
+    customSections: [],
+    sectionOrder: [],
+    versions: [],
+  },
+  source: { inputType: 'file' as const, rawText: 'Jane Doe', fileName: 'jane.pdf', importedAt: 'now' },
+  notes: [],
+};
+
+/** Captures the request the API layer makes and replies with `json`. */
+function stubFetch(json: unknown) {
+  const captured: { url: string; method?: string; body: unknown; auth: string | null } = {
+    url: '',
+    method: undefined,
+    body: null,
+    auth: null,
+  };
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    captured.url = String(input);
+    captured.method = init?.method;
+    captured.auth = new Headers(init?.headers).get('Authorization');
+    captured.body = init?.body ? JSON.parse(String(init.body)) : null;
+    return { ok: true, status: 200, json: async () => json } as unknown as Response;
+  }) as typeof fetch;
+
+  return captured;
+}
+
+test('createSavedResume posts the parsed payload with a bearer token', async () => {
+  const captured = stubFetch({ savedResume: { id: 'saved-1', label: 'jane.pdf' } });
+
+  const result = await createSavedResume({ parsed: SAVED_PARSED });
+
+  assert.equal(captured.method, 'POST');
+  assert.ok(captured.url.endsWith('/saved-resumes'));
+  assert.equal(captured.auth, `Bearer ${TEST_TOKEN}`);
+  assert.deepEqual(captured.body, { parsed: SAVED_PARSED });
+  assert.deepEqual(result, { id: 'saved-1', label: 'jane.pdf' });
+});
+
+test('createSavedResume forwards an explicit label', async () => {
+  const captured = stubFetch({ savedResume: { id: 'saved-1', label: 'Backend' } });
+
+  await createSavedResume({ parsed: SAVED_PARSED, label: 'Backend' });
+
+  assert.deepEqual(captured.body, { parsed: SAVED_PARSED, label: 'Backend' });
+});
+
+test('listSavedResumes unwraps the envelope and defaults to an empty list', async () => {
+  const captured = stubFetch({ savedResumes: [{ id: 'a', label: 'A' }] });
+  const resumes = await listSavedResumes();
+
+  assert.equal(captured.method, 'GET');
+  assert.ok(captured.url.endsWith('/saved-resumes'));
+  assert.equal(resumes.length, 1);
+  assert.equal(resumes[0].id, 'a');
+
+  stubFetch({});
+  assert.deepEqual(await listSavedResumes(), []);
+});
+
+test('getSavedResume encodes the id and returns the detail', async () => {
+  const captured = stubFetch({ savedResume: { id: 'a b', label: 'A', parsed: SAVED_PARSED } });
+  const detail = await getSavedResume('a b');
+
+  assert.ok(captured.url.endsWith('/saved-resumes/a%20b'));
+  assert.deepEqual(detail.parsed, SAVED_PARSED);
+});
+
+test('getSavedResume throws when the envelope is missing', async () => {
+  stubFetch({});
+  await assert.rejects(() => getSavedResume('a'), /missing savedResume/);
+});
+
+test('renameSavedResume PATCHes the new label', async () => {
+  const captured = stubFetch({ savedResume: { id: 'a', label: 'Renamed' } });
+  const updated = await renameSavedResume('a', 'Renamed');
+
+  assert.equal(captured.method, 'PATCH');
+  assert.ok(captured.url.endsWith('/saved-resumes/a'));
+  assert.deepEqual(captured.body, { label: 'Renamed' });
+  assert.equal(updated.label, 'Renamed');
+});
+
+test('deleteSavedResume issues a DELETE for the id', async () => {
+  const captured = stubFetch({ ok: true });
+  await deleteSavedResume('a');
+
+  assert.equal(captured.method, 'DELETE');
+  assert.ok(captured.url.endsWith('/saved-resumes/a'));
+  assert.equal(captured.auth, `Bearer ${TEST_TOKEN}`);
 });
