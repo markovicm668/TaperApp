@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowRight, ArrowUpCircle, BarChart3, FileSearch, HelpCircle, LayoutGrid, Plus } from 'lucide-react';
+import { ArrowRight, BarChart3, FileSearch, HelpCircle, LayoutGrid, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { addCredits } from '@/lib/api';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -231,14 +231,14 @@ export function AppNavbar({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="h-8 px-2"
                         aria-label="Upgrade to Pro"
                         onClick={() => {
                           track('nav_upgrade_clicked');
                           setUpgradeOpen(true);
                         }}
                       >
-                        <ArrowUpCircle className="h-4 w-4" />
+                        Upgrade
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent><p>Upgrade to Pro</p></TooltipContent>

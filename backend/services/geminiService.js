@@ -1,8 +1,9 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { getEnv } = require("../config/env");
+const {
+  createGeminiGenerateContent,
+  parseModelJson,
+} = require("./geminiParseService");
 
-const GEMINI_API_KEY = getEnv("GEMINI_API_KEY");
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const MAX_ANALYZE_ATTEMPTS = 2;
 
 function serializeParsedResume(resumeData) {
   const lines = [];
@@ -142,18 +143,12 @@ function serializeParsedResume(resumeData) {
   return lines.join("\n");
 }
 
-async function analyzeResume({ resumeText, jobDescription, parsedResumeData }) {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-3.6-flash",
-  });
+function buildAnalyzePrompt({ resumeForPrompt, jobDescription, repairReason }) {
+  const repairInstruction = repairReason
+    ? `\nREPAIR NOTE:\nYour previous response could not be parsed as JSON because: ${repairReason}\nReturn one valid JSON object only — no markdown fences, no commentary, and no literal newlines or control characters inside string values.\n`
+    : "";
 
-  const resumeForPrompt = parsedResumeData
-    ? serializeParsedResume(parsedResumeData)
-    : resumeText;
-
-    console.log("-> Serialized resume for prompt:", resumeForPrompt);
-    
-  const prompt = `
+  return `
 You are an ATS resume optimization engine.
 
 Your task is to compare the provided resume against the job description and produce structured, conservative improvements.
@@ -282,31 +277,62 @@ SUMMARY RULES:
 - Improve ATS alignment by naturally incorporating appropriate important keywords from the JD
 - Aim for the same length and style as the original summary
 - Return the rewrite in highlights.update using exactly the id "summary-0" (the bracketed id shown next to the summary text in the resume). Do not invent any other id.
-`;
+${repairInstruction}`;
+}
+
+async function analyzeResume(
+  { resumeText, jobDescription, parsedResumeData },
+  options = {}
+) {
+  const geminiGenerateContent =
+    options.geminiGenerateContent || createGeminiGenerateContent();
+
+  const resumeForPrompt = parsedResumeData
+    ? serializeParsedResume(parsedResumeData)
+    : resumeText;
+
   console.log("-> Gemini rewrite input data:", {
     usingParsedResume: Boolean(parsedResumeData),
     resumeForPromptLength: resumeForPrompt?.length ?? 0,
     jobDescriptionLength: jobDescription?.length ?? 0,
   });
 
-  const analyzeStart = Date.now();
-  const result = await model.generateContent(prompt);
-  console.log(`-> Gemini analysis call took ${Date.now() - analyzeStart}ms`);
+  let lastError = null;
 
-  const outputText = result.response.text();
+  // chargeAnalysis has already debited the caller by the time we get here, so a
+  // response we can't parse is worth one repair attempt rather than burning the
+  // credit outright.
+  for (let attempt = 1; attempt <= MAX_ANALYZE_ATTEMPTS; attempt += 1) {
+    const prompt = buildAnalyzePrompt({
+      resumeForPrompt,
+      jobDescription,
+      repairReason: lastError ? lastError.message : undefined,
+    });
 
-  console.log("-> Gemini API call completed. Raw output:", outputText);
+    const analyzeStart = Date.now();
+    const outputText = await geminiGenerateContent(prompt);
+    console.log(
+      `-> Gemini analysis call took ${Date.now() - analyzeStart}ms (attempt ${attempt})`
+    );
 
-  try {
-    const parsed = JSON.parse(outputText);
-    console.log("-> Parsed Gemini output:", JSON.stringify(parsed, null, 2));
-    return parsed;
-  } catch (e) {
-    console.error("-> JSON Parsing Failed in service. Raw AI Output:", outputText.slice(0, 500) + '...');
-    const jsonError = new Error("AI returned invalid JSON structure.");
-    jsonError.code = "AI_JSON_PARSE_FAILED";
-    throw jsonError;
+    try {
+      // Same hardening the parse path uses: strips markdown fences, ignores
+      // prose around the object, and escapes the raw control characters Gemini
+      // intermittently emits inside string values.
+      return parseModelJson(outputText);
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `-> Analyze JSON parse failed (attempt ${attempt}): ${err.message}\n` +
+          `   Raw AI output: ${String(outputText).slice(0, 500)}`
+      );
+    }
   }
+
+  const jsonError = new Error("AI returned invalid JSON structure.");
+  jsonError.code = "AI_JSON_PARSE_FAILED";
+  jsonError.details = { geminiError: lastError ? lastError.message : undefined };
+  throw jsonError;
 }
 
-module.exports = { analyzeResume, serializeParsedResume };
+module.exports = { analyzeResume, serializeParsedResume, buildAnalyzePrompt };
