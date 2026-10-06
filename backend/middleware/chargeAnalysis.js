@@ -36,12 +36,20 @@ function chargeAnalysis(
           });
         }
         req.tokensRemaining = undefined;
+        // Anonymous trials stay out of the per-résumé allowance: they are
+        // already held to a tighter cap (one per uid, two per IP per 7 days),
+        // and consumeFreeTrial has no release path, so a late fingerprint
+        // refusal could not hand the trial back.
+        req.fromGrant = false;
+        req.charged = false;
         return next();
       }
 
       const result = await chargeTokens(req.auth.uid, cost);
       req.tokensRemaining = result.tokensRemaining;
       req.entitled = result.entitled;
+      req.fromGrant = result.fromGrant;
+      req.charged = result.charged;
       return next();
     } catch (err) {
       if (err.code === "INSUFFICIENT_TOKENS") {

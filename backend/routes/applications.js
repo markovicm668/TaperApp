@@ -5,11 +5,16 @@ const {
   refundApplicationSave: realRefundApplicationSave,
 } = require("../services/tokenService");
 const { isAnonymousRequest } = require("../utils/authClaims");
+const {
+  consumeAllowance: realConsumeAllowance,
+} = require("../services/resumeFingerprintService");
+const { computeFingerprints, basicsFromParsed } = require("../utils/resumeFingerprint");
 
 function createApplicationsRouter({
   service = applicationService,
   chargeSave = realChargeApplicationSave,
   refundSave = realRefundApplicationSave,
+  consumeAllowance = realConsumeAllowance,
 } = {}) {
   const router = express.Router();
 
@@ -65,6 +70,30 @@ function createApplicationsRouter({
           });
         }
         throw err;
+      }
+
+      // The account's one free save is granted value, so it counts against the
+      // per-résumé allowance the same way a granted analysis does. Token-paid
+      // and entitled saves report fromGrant: false and skip this entirely.
+      if (chargeResult.fromGrant && !chargeResult.entitled) {
+        const allowance = await consumeAllowance(
+          computeFingerprints(basicsFromParsed(parsed))
+        );
+        if (!allowance.ok) {
+          try {
+            await refundSave(req.auth.uid, chargeResult);
+          } catch (refundErr) {
+            console.error("-> Allowance refund failed (free save not restored):", refundErr);
+          }
+          return res.status(402).json({
+            error: {
+              code: "FREE_LIMIT_REACHED",
+              message:
+                "The free starter credits for this résumé have been used. " +
+                "Invite a friend for more credits, or upgrade for unlimited analyses.",
+            },
+          });
+        }
       }
 
       let created;

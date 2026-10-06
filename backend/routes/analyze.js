@@ -5,6 +5,9 @@ const { parseResumeSections } = require("../services/geminiParseService");
 const { claimReferralReward } = require("../services/referralService");
 const { createApplication } = require("../services/applicationService");
 const { isAnonymousRequest } = require("../utils/authClaims");
+const { consumeAllowance } = require("../services/resumeFingerprintService");
+const { computeFingerprints, basicsFromParsed } = require("../utils/resumeFingerprint");
+const { refundAnalysisTokens } = require("../services/tokenService");
 
 router.post("/", async (req, res) => {
   const sw = { _start: Date.now(), _steps: [] };
@@ -44,6 +47,43 @@ router.post("/", async (req, res) => {
         fileName,
       });
       lap("gemini-parse");
+    }
+
+    // Per-résumé free-grant allowance. Checked here rather than in
+    // chargeAnalysis because the fingerprint only exists once the résumé is
+    // parsed — and checking in the middleware would read only
+    // req.body.parsedResumeData, letting a raw-resumeText request skip it
+    // entirely. Runs before the expensive analyze call so a refusal costs no
+    // Gemini tokens. Entitled, earned and purchased spends never reach this.
+    if (!req.entitled && req.fromGrant) {
+      const fingerprints = computeFingerprints(basicsFromParsed(parseResult.payload));
+      const allowance = await consumeAllowance(fingerprints);
+      lap("fingerprint-allowance");
+
+      if (!allowance.ok) {
+        // The token was already debited upstream; hand it back so a blocked
+        // attempt costs the user nothing.
+        await refundAnalysisTokens(req.auth.uid, 1, {
+          charged: req.charged,
+          fromGrant: req.fromGrant,
+        }).catch((refundErr) =>
+          console.error("-> Allowance refund error:", refundErr)
+        );
+
+        console.warn(
+          `-> [analyze] free-grant allowance exhausted for uid ${req.auth.uid} ` +
+            `(matched on ${allowance.kind})`
+        );
+
+        return res.status(402).json({
+          error: {
+            code: "FREE_LIMIT_REACHED",
+            message:
+              "The free starter credits for this résumé have been used. " +
+              "Invite a friend for more credits, or upgrade for unlimited analyses.",
+          },
+        });
+      }
     }
 
     const result = await analyzeResume({ resumeText, jobDescription, parsedResumeData: parseResult.payload.resumeData });

@@ -17,6 +17,9 @@ const SUBSCRIPTIONS_COLLECTION = "polarSubscriptions";
 function mintedUserDefaults() {
   return {
     tokensRemaining: INITIAL_TOKENS,
+    // Still an unspent grant: the plan entitles them now, but if it lapses
+    // these 5 are granted credits and the fingerprint ledger should see them.
+    grantSpent: 0,
     createdAt: FieldValue.serverTimestamp(),
   };
 }

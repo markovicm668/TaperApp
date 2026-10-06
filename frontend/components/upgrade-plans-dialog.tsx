@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileSearch, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,7 +21,13 @@ import { useAuth } from '@/lib/auth/useAuth';
 import { useTokens } from '@/lib/tokens/TokenContext';
 import { cn } from '@/lib/utils';
 
-export type UpgradeSource = 'nav' | 'sidebar' | 'out_of_credits' | 'results_lock' | 'settings';
+export type UpgradeSource =
+  | 'nav'
+  | 'sidebar'
+  | 'out_of_credits'
+  | 'resume_limit'
+  | 'results_lock'
+  | 'settings';
 
 interface UpgradePlansDialogProps {
   open: boolean;
@@ -30,6 +36,11 @@ interface UpgradePlansDialogProps {
   title?: string;
   description?: string;
   showInvitePanel?: boolean;
+  /**
+   * Highlighted explanation rendered above the plans. For states that need to
+   * say *why* the user is here, which a one-line DialogDescription cannot carry.
+   */
+  notice?: ReactNode;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -44,6 +55,7 @@ export function UpgradePlansDialog({
   title = 'Tailor Pro',
   description,
   showInvitePanel = false,
+  notice,
 }: UpgradePlansDialogProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -149,6 +161,12 @@ export function UpgradePlansDialog({
           <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
+
+        {notice ? (
+          <div className="rounded-lg border border-border bg-muted/50 px-3.5 py-3 text-sm leading-relaxed text-muted-foreground">
+            {notice}
+          </div>
+        ) : null}
 
         {entitled ? (
           // Edge case: dialog opened from a stale surface after activation —

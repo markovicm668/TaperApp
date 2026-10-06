@@ -28,6 +28,8 @@ export interface AnalyzeFlow {
   handleAnalysisComplete: () => void;
   showOutOfCredits: boolean;
   setShowOutOfCredits: (show: boolean) => void;
+  showResumeLimit: boolean;
+  setShowResumeLimit: (show: boolean) => void;
   showSignupPrompt: boolean;
   setShowSignupPrompt: (show: boolean) => void;
 }
@@ -42,6 +44,7 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parseDone, setParseDone] = useState(false);
   const [showOutOfCredits, setShowOutOfCredits] = useState(false);
+  const [showResumeLimit, setShowResumeLimit] = useState(false);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
   // Both flags must be true before we navigate to results.
@@ -227,6 +230,17 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
           return;
         }
 
+        if (errorCode === 'FREE_LIMIT_REACHED') {
+          // This résumé has used up its free starter credits across every
+          // account it has been used on. Credits earned by inviting a friend,
+          // or any plan, lift the limit — so this prompt offers both.
+          track('resume_limit_blocked', { source });
+          setParseDone(true);
+          setIsAnalyzing(false);
+          setShowResumeLimit(true);
+          return;
+        }
+
         if (errorCode === 'INSUFFICIENT_TOKENS') {
           track('analysis_failed', { source, reason: 'insufficient_tokens' });
           const tokensErr = err as { tokensRemaining?: number };
@@ -304,6 +318,8 @@ export function useAnalyzeFlow(options: UseAnalyzeFlowOptions = {}): AnalyzeFlow
     handleAnalysisComplete,
     showOutOfCredits,
     setShowOutOfCredits,
+    showResumeLimit,
+    setShowResumeLimit,
     showSignupPrompt,
     setShowSignupPrompt,
   };

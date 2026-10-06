@@ -7,7 +7,7 @@ import { useTokens } from '@/lib/tokens/TokenContext';
 import { track } from '@/lib/analytics';
 
 interface InviteFriendPanelProps {
-  source: 'nav' | 'sidebar' | 'out_of_credits' | 'results_lock' | 'settings';
+  source: 'nav' | 'sidebar' | 'out_of_credits' | 'resume_limit' | 'results_lock' | 'settings';
 }
 
 export function InviteFriendPanel({ source }: InviteFriendPanelProps) {

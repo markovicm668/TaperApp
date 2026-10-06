@@ -10,6 +10,20 @@ function getUserRef(uid) {
   return getFirebaseFirestore().collection(USERS_COLLECTION).doc(uid);
 }
 
+// How many of this account's INITIAL_TOKENS grant have been spent. Credit
+// provenance, not a second balance: it tells the résumé-fingerprint ledger
+// which spends were free gifts (countable) and which the user earned via a
+// referral or bought (never countable, never blockable).
+//
+// Absent on accounts created before this field existed. Those are read as
+// grant-exhausted, since there is no way to reconstruct how much of their
+// historical spend was grant-funded — lenient by design; new accounts are what
+// the fingerprint ledger is for.
+function readGrantSpent(data) {
+  const value = data?.grantSpent;
+  return Number.isFinite(value) ? value : INITIAL_TOKENS;
+}
+
 async function ensureUser(uid) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
@@ -30,6 +44,7 @@ async function ensureUser(uid) {
       tokensRemaining: INITIAL_TOKENS,
       referralCode: generateReferralCode(),
       referredBy: null,
+      grantSpent: 0,
       createdAt: FieldValue.serverTimestamp(),
     };
     tx.set(userRef, newUser);
@@ -40,6 +55,11 @@ async function ensureUser(uid) {
 // Charges an analysis. Users on an active plan (see entitlementService) are
 // not debited — their balance is returned untouched. One transaction, one
 // read serving both the plan check and the balance.
+//
+// Also reports `fromGrant`: whether this spend came out of the signup grant
+// rather than earned or purchased credits. The caller uses it to decide whether
+// the spend counts against the per-résumé allowance — entitled spends and
+// earned/bought spends never do.
 async function chargeAnalysisTokens(uid, cost) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
@@ -51,6 +71,7 @@ async function chargeAnalysisTokens(uid, cost) {
     if (!snap.exists) {
       data = {
         tokensRemaining: INITIAL_TOKENS,
+        grantSpent: 0,
         createdAt: FieldValue.serverTimestamp(),
       };
       tx.set(userRef, data);
@@ -63,6 +84,7 @@ async function chargeAnalysisTokens(uid, cost) {
       return {
         entitled: true,
         charged: false,
+        fromGrant: false,
         tokensRemaining: data.tokensRemaining,
       };
     }
@@ -76,9 +98,27 @@ async function chargeAnalysisTokens(uid, cost) {
       throw err;
     }
 
+    const grantSpent = readGrantSpent(data);
+    const fromGrant = grantSpent < INITIAL_TOKENS;
+
     const newBalance = data.tokensRemaining - cost;
-    tx.update(userRef, { tokensRemaining: newBalance });
-    return { entitled: false, charged: true, tokensRemaining: newBalance };
+    tx.update(userRef, {
+      tokensRemaining: newBalance,
+      ...(fromGrant ? { grantSpent: Math.min(grantSpent + cost, INITIAL_TOKENS) } : {}),
+    });
+    return { entitled: false, charged: true, fromGrant, tokensRemaining: newBalance };
+  });
+}
+
+// Compensates a charge whose analysis was refused after the fact — the
+// per-résumé allowance check runs once the résumé has been parsed, which is
+// necessarily after chargeAnalysisTokens has already debited. Rolls back
+// `grantSpent` too, or a blocked attempt would silently burn a grant slot.
+async function refundAnalysisTokens(uid, cost, { charged, fromGrant } = {}) {
+  if (!charged) return;
+  await getUserRef(uid).update({
+    tokensRemaining: FieldValue.increment(cost),
+    ...(fromGrant ? { grantSpent: FieldValue.increment(-cost) } : {}),
   });
 }
 
@@ -91,6 +131,10 @@ async function getTokensRemaining(uid) {
 // POST /applications. The first such save per account is free — tracked by the
 // freeSaveUsed flag — so the honest "try free → sign up → keep your analysis"
 // funnel costs nothing exactly once; every later save costs 1 token.
+//
+// That free save is granted value like the INITIAL_TOKENS are, so consuming it
+// reports `fromGrant` and counts against the per-résumé allowance. Saves paid
+// for with a token do not.
 async function chargeApplicationSave(uid) {
   const db = getFirebaseFirestore();
   const userRef = getUserRef(uid);
@@ -105,10 +149,16 @@ async function chargeApplicationSave(uid) {
         tokensRemaining: INITIAL_TOKENS,
         referralCode: generateReferralCode(),
         referredBy: null,
+        grantSpent: 0,
         createdAt: FieldValue.serverTimestamp(),
         freeSaveUsed: true,
       });
-      return { charged: false, entitled: false, tokensRemaining: INITIAL_TOKENS };
+      return {
+        charged: false,
+        entitled: false,
+        fromGrant: true,
+        tokensRemaining: INITIAL_TOKENS,
+      };
     }
 
     const data = snap.data();
@@ -119,13 +169,19 @@ async function chargeApplicationSave(uid) {
       return {
         charged: false,
         entitled: true,
+        fromGrant: false,
         tokensRemaining: data.tokensRemaining,
       };
     }
 
     if (!data.freeSaveUsed) {
       tx.update(userRef, { freeSaveUsed: true });
-      return { charged: false, entitled: false, tokensRemaining: data.tokensRemaining };
+      return {
+        charged: false,
+        entitled: false,
+        fromGrant: true,
+        tokensRemaining: data.tokensRemaining,
+      };
     }
 
     if (data.tokensRemaining < 1) {
@@ -139,7 +195,7 @@ async function chargeApplicationSave(uid) {
 
     const newBalance = data.tokensRemaining - 1;
     tx.update(userRef, { tokensRemaining: newBalance });
-    return { charged: true, entitled: false, tokensRemaining: newBalance };
+    return { charged: true, entitled: false, fromGrant: false, tokensRemaining: newBalance };
   });
 }
 
@@ -182,10 +238,12 @@ async function addTokens(uid, amount) {
 module.exports = {
   ensureUser,
   chargeAnalysisTokens,
+  refundAnalysisTokens,
   addTokens,
   getTokensRemaining,
   chargeApplicationSave,
   refundApplicationSave,
+  readGrantSpent,
   INITIAL_TOKENS,
   USERS_COLLECTION,
 };

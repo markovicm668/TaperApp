@@ -20,6 +20,7 @@ type AnalyticsEvent =
   | 'nav_invite_clicked'
   | 'nav_referral_link_copied'
   | 'analysis_blocked_out_of_credits'
+  | 'resume_limit_blocked'
   | 'plan_purchase_completed'
   | 'plan_purchase_failed'
   | 'manage_subscription_clicked'

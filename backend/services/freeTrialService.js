@@ -1,5 +1,10 @@
 const { getFirebaseFirestore } = require("./firebaseAdmin");
-const { FieldValue, Timestamp } = require("firebase-admin/firestore");
+const { FieldValue } = require("firebase-admin/firestore");
+const {
+  evaluateWindow,
+  readUsedAtMillis,
+  toTimestampArray,
+} = require("../utils/rollingWindow");
 
 // One-time free-analysis trial for anonymous (Firebase anonymous-auth) users,
 // tracked per anonymous uid. Kept in its own collection so real-account data
@@ -27,19 +32,10 @@ function getIpRef(ipHash) {
   return getFirebaseFirestore().collection(ANON_TRIAL_IPS_COLLECTION).doc(ipHash);
 }
 
-// Pure rolling-window decision: prune entries older than the window, then
-// allow only if fewer than `limit` remain.
-function evaluateIpWindow(usedAtMillis, nowMillis, limit, windowMs) {
-  const prunedMillis = (usedAtMillis || []).filter((ms) => nowMillis - ms < windowMs);
-  return { allowed: prunedMillis.length < limit, prunedMillis };
-}
-
-function readUsedAtMillis(snap) {
-  if (!snap.exists) return [];
-  const usedAt = snap.data().usedAt;
-  if (!Array.isArray(usedAt)) return [];
-  return usedAt.map((t) => (t?.toMillis ? t.toMillis() : Number(t))).filter(Number.isFinite);
-}
+// The rolling-window decision now lives in utils/rollingWindow so the
+// per-résumé free-grant ledger can share it. Kept exported under its original
+// name — it is part of this module's tested surface.
+const evaluateIpWindow = evaluateWindow;
 
 // Transactionally consume the one free analysis, accounting the caller's IP in
 // the same transaction so a uid trial can never be consumed unthrottled.
@@ -83,9 +79,7 @@ async function consumeFreeTrial(uid, ipHash = null) {
     }
 
     if (ipSnap) {
-      // serverTimestamp() is not allowed inside arrays; the backend clock is
-      // the one we trust for the window math anyway.
-      const usedAt = [...prunedMillis, Date.now()].map((ms) => Timestamp.fromMillis(ms));
+      const usedAt = toTimestampArray([...prunedMillis, Date.now()]);
       tx.set(
         getIpRef(ipHash),
         {

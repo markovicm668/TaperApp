@@ -72,6 +72,8 @@ export default function AnalyzePage() {
     handleAnalysisComplete,
     showOutOfCredits,
     setShowOutOfCredits,
+    showResumeLimit,
+    setShowResumeLimit,
   } = useAnalyzeFlow({
     source: 'analyze_page',
   });
@@ -313,6 +315,23 @@ export default function AnalyzePage() {
         showInvitePanel
         title="You're out of credits"
         description="Upgrade for unlimited analyses, or invite a friend for free credits."
+      />
+      <UpgradePlansDialog
+        open={showResumeLimit}
+        onOpenChange={setShowResumeLimit}
+        source="resume_limit"
+        showInvitePanel
+        title="Free starter credits used up"
+        notice={
+          <>
+            Starter credits are counted per résumé rather than per account, and this
+            résumé has used all of its free ones.
+            <span className="mt-2 block text-foreground">
+              Credits you earn by inviting a friend work on it straight away — as does
+              any plan.
+            </span>
+          </>
+        }
       />
     </div>
   );
